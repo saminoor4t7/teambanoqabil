@@ -1,0 +1,12 @@
+# Django 5.2.8+ supports Python 3.14 (the project virtualenv uses 3.14).
+Django>=5.2.8,<5.3
+djangorestframework
+djangorestframework-simplejwt
+django-filter
+psycopg2-binary
+Pillow
+requests
+python-decouple
+django-cors-headers
+celery
+redis
