@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import PendingRegistration, Role
 
@@ -12,6 +14,27 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ["id", "username", "email", "role", "phone_number", "phone_verified", "date_joined"]
         read_only_fields = ["id", "phone_verified", "date_joined"]
+
+
+class LoginSerializer(TokenObtainPairSerializer):
+    username_field = User.EMAIL_FIELD
+
+    def validate(self, attrs):
+        """Authenticate with the case-insensitive email address used at registration."""
+        login = attrs["email"].strip()
+        user = User.objects.filter(email__iexact=login).first()
+        if not user or not user.check_password(attrs["password"]) or not user.is_active:
+            raise AuthenticationFailed(
+                self.error_messages["no_active_account"],
+                "no_active_account",
+            )
+
+        refresh = self.get_token(user)
+        return {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "user": user,
+        }
 
 
 class RegisterSerializer(serializers.Serializer):

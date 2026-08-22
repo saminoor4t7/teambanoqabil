@@ -13,17 +13,14 @@ are interconnected through two shared apps:
     while still fully interconnected through one source of truth.
 """
 
-import os
 from datetime import timedelta
 from pathlib import Path
 
-from decouple import Csv, config
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = config("DJANGO_SECRET_KEY", default="insecure-dev-key-change-me")
-DEBUG = config("DEBUG", default=True, cast=bool)
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*", cast=Csv())
+SECRET_KEY = "change-me"
+DEBUG = True
+ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -35,6 +32,7 @@ INSTALLED_APPS = [
     # third-party
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "django_filters",
     "corsheaders",
     # Medical Panda apps
@@ -80,12 +78,8 @@ ASGI_APPLICATION = "config.asgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": config("DB_ENGINE", default="django.db.backends.sqlite3"),
-        "NAME": config("DB_NAME", default=BASE_DIR / "db.sqlite3"),
-        "USER": config("DB_USER", default=""),
-        "PASSWORD": config("DB_PASSWORD", default=""),
-        "HOST": config("DB_HOST", default=""),
-        "PORT": config("DB_PORT", default=""),
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
 }
 
@@ -122,27 +116,25 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
     "ROTATE_REFRESH_TOKENS": True,
 }
 
-CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", default=True, cast=bool)
+CORS_ALLOW_ALL_ORIGINS = True
 
-# The console backend prints registration OTP emails in the development-server
-# terminal. Configure an SMTP backend in the environment to deliver real mail.
-EMAIL_BACKEND = config("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
-DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="sussbhoo@gmail.com")
-EMAIL_HOST = config("EMAIL_HOST", default="")
-EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
-EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
-EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+DEFAULT_FROM_EMAIL = "sussbhoo@gmail.com"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_HOST_USER = "sussbhoo@gmail.com"
+EMAIL_HOST_PASSWORD = "eozjmshobprvhzwd"
+EMAIL_USE_TLS = True
 
 # Async job queue (OCR, forecasting, notifications) per architecture doc.
-CELERY_BROKER_URL = config("REDIS_URL", default="redis://localhost:6379/0")
+CELERY_BROKER_URL = "redis://localhost:6379/0"
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 
 # Base URL of the separate AI microservice (Vision/OCR + LLM/RAG), called
 # by apps.customer.services.ai_client — never called directly from models.
-AI_SERVICE_BASE_URL = config("AI_SERVICE_BASE_URL", default="http://localhost:9000")
+AI_SERVICE_BASE_URL = "http://localhost:9000"

@@ -11,9 +11,10 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 
 from .models import AuditLog, PendingRegistration
-from .serializers import RegistrationOTPVerifySerializer, RegisterSerializer, UserSerializer
+from .serializers import LoginSerializer, RegistrationOTPVerifySerializer, RegisterSerializer, UserSerializer
 
 User = get_user_model()
 
@@ -75,6 +76,36 @@ class RegisterView(generics.CreateAPIView):
             {"detail": "Registration code sent to your email address.", "email": pending.email},
             status=status.HTTP_201_CREATED,
         )
+
+
+class LoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = User.objects.get(email__iexact=serializer.validated_data["user"].email)
+        return Response(
+            {
+                "access": serializer.validated_data["access"],
+                "refresh": serializer.validated_data["refresh"],
+                "user": UserSerializer(user).data,
+            }
+        )
+
+
+class LogoutView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        refresh_token = request.data.get("refresh")
+        if not refresh_token:
+            return Response({"detail": "Refresh token is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            RefreshToken(refresh_token).blacklist()
+        except TokenError:
+            return Response({"detail": "Invalid or expired refresh token."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "Logout successful."}, status=status.HTTP_205_RESET_CONTENT)
 
 
 class RegistrationOTPVerifyView(APIView):
