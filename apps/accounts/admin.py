@@ -6,10 +6,17 @@ from .models import AuditLog, User
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ["username", "email", "role", "phone_number", "phone_verified", "is_active"]
-    list_filter = ["role", "phone_verified", "is_active"]
-    fieldsets = BaseUserAdmin.fieldsets + (
-        ("Medical Panda", {"fields": ("role", "phone_number", "phone_verified", "is_active_on_platform")}),
+    # All account types share this table; role identifies customer, rider,
+    # pharmacy, support, or admin accounts.
+    list_display = ["username", "email", "role"]
+    list_filter = ["role"]
+    search_fields = ["username", "email"]
+    ordering = ["username"]
+    fieldsets = (
+        (None, {"fields": ("username", "email")}),
+        ("Medical Panda", {"fields": ("role", "phone_number", "phone_verified", "is_active_on_platform")} ),
+        ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")} ),
+        ("Important dates", {"fields": ("last_login", "date_joined")} ),
     )
 
 
