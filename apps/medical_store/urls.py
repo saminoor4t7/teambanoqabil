@@ -7,6 +7,7 @@ from .views import (
     InventoryViewSet,
     MyPharmacyView,
     OrderTransitionView,
+    PharmacyDirectoryView,
     VerifyPrescriptionView,
 )
 
@@ -15,6 +16,7 @@ router.register("inventory", InventoryViewSet, basename="inventory")
 
 urlpatterns = [
     path("me/", MyPharmacyView.as_view(), name="pharmacy-me"),
+    path("directory/", PharmacyDirectoryView.as_view(), name="pharmacy-directory"),
     path("orders/incoming/", IncomingOrdersView.as_view(), name="incoming-orders"),
     path("orders/<int:order_id>/<str:action>/", OrderTransitionView.as_view(), name="order-transition"),
     path("prescriptions/<int:prescription_id>/verify/", VerifyPrescriptionView.as_view(), name="verify-prescription"),
