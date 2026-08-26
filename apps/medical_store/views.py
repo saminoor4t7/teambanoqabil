@@ -1,8 +1,8 @@
 from math import asin, cos, radians, sin, sqrt
 
 from django.shortcuts import get_object_or_404
-from rest_framework import generics, permissions, status, viewsets
-from rest_framework.exceptions import ValidationError
+from rest_framework import generics, permissions, serializers, status, viewsets
+
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -25,6 +25,23 @@ from .serializers import (
 
 def _pharmacy(request):
     return get_object_or_404(PharmacyProfile, user=request.user)
+
+
+class PharmacyDirectorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PharmacyProfile
+        fields = ["id", "business_name", "city", "address_line", "is_open", "is_verified"]
+
+
+class PharmacyDirectoryView(generics.ListAPIView):
+    """Public read-only directory so customers can discover pharmacies."""
+
+    serializer_class = PharmacyDirectorySerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+
+    def get_queryset(self):
+        return PharmacyProfile.objects.filter(is_open=True).order_by("business_name")
 
 
 class MyPharmacyView(generics.RetrieveUpdateAPIView):
