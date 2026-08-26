@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.core.validators import MaxValueValidator, MinValueValidator
 
 
 class PharmacyProfile(models.Model):
@@ -25,6 +26,12 @@ class InventoryItem(models.Model):
     quantity_in_stock = models.PositiveIntegerField(default=0)
     reorder_threshold = models.PositiveIntegerField(default=10)  # feeds low-stock visibility (FR-13)
     selling_price = models.DecimalField(max_digits=10, decimal_places=2)
+    discount_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

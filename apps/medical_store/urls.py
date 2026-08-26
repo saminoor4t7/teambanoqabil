@@ -4,9 +4,13 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     DemandForecastView,
     IncomingOrdersView,
+    IncomingPrescriptionsView,
     InventoryViewSet,
     MyPharmacyView,
+    NearbyPharmacyView,
     OrderTransitionView,
+    PharmacyDetailView,
+    PharmacyListView,
     VerifyPrescriptionView,
 )
 
@@ -15,7 +19,11 @@ router.register("inventory", InventoryViewSet, basename="inventory")
 
 urlpatterns = [
     path("me/", MyPharmacyView.as_view(), name="pharmacy-me"),
+    path("list/", PharmacyListView.as_view(), name="pharmacy-list"),
+    path("nearby/", NearbyPharmacyView.as_view(), name="nearby-pharmacies"),
+    path("<int:pharmacy_id>/", PharmacyDetailView.as_view(), name="pharmacy-detail"),
     path("orders/incoming/", IncomingOrdersView.as_view(), name="incoming-orders"),
+    path("prescriptions/incoming/", IncomingPrescriptionsView.as_view(), name="incoming-prescriptions"),
     path("orders/<int:order_id>/<str:action>/", OrderTransitionView.as_view(), name="order-transition"),
     path("prescriptions/<int:prescription_id>/verify/", VerifyPrescriptionView.as_view(), name="verify-prescription"),
     path("forecasts/", DemandForecastView.as_view(), name="demand-forecasts"),

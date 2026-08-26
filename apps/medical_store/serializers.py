@@ -7,10 +7,22 @@ from .models import DemandForecast, InventoryItem, PharmacyProfile, Prescription
 
 
 class PharmacyProfileSerializer(serializers.ModelSerializer):
+    pharmacy_id = serializers.IntegerField(source="pk", read_only=True)
+
     class Meta:
         model = PharmacyProfile
-        fields = "__all__"
+        fields = [
+            "pharmacy_id", "id", "user", "business_name", "license_number", "address_line",
+            "city", "latitude", "longitude", "is_verified", "is_open", "rating", "created_at",
+        ]
         read_only_fields = ["user", "is_verified", "rating"]
+
+
+class NearbyPharmacySerializer(PharmacyProfileSerializer):
+    distance_km = serializers.FloatField(read_only=True)
+
+    class Meta(PharmacyProfileSerializer.Meta):
+        fields = PharmacyProfileSerializer.Meta.fields + ["distance_km"]
 
 
 class InventoryItemSerializer(serializers.ModelSerializer):

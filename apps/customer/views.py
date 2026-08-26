@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import AuditLog
+from apps.medical_store.models import InventoryItem, PharmacyProfile
 
 from . import services
 from .models import Address, Cart, CustomerProfile, Prescription
@@ -52,7 +53,16 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
         return Prescription.objects.filter(customer__user=self.request.user)
 
     def perform_create(self, serializer):
-        prescription = serializer.save(customer=_profile(self.request), status="processing")
+        pharmacy_id = self.request.data.get("pharmacy") or self.request.data.get("pharmacy_id")
+        pharmacy = get_object_or_404(
+            PharmacyProfile,
+            id=pharmacy_id,
+            is_verified=True,
+            is_open=True,
+        )
+        prescription = serializer.save(
+            customer=_profile(self.request), pharmacy=pharmacy, status="processing"
+        )
         AuditLog.objects.create(
             actor=self.request.user, action="prescription_uploaded",
             target_type="Prescription", target_id=str(prescription.id),
@@ -77,30 +87,32 @@ class CartView(APIView):
     def post(self, request):
         """Add/update a single item: {"medicine_id": 1, "quantity": 2, "pharmacy_id": 3}"""
         cart, _ = Cart.objects.get_or_create(customer=_profile(request))
-        pharmacy_id = request.data.get("pharmacy_id")
+        pharmacy_id = request.data.get("pharmacy_id") or request.data.get("pharmacy")
         if pharmacy_id:
-            cart.pharmacy_id = pharmacy_id
-            cart.save(update_fields=["pharmacy"])
+            pharmacy = get_object_or_404(
+                PharmacyProfile, id=pharmacy_id, is_verified=True, is_open=True
+            )
+            if cart.pharmacy_id != pharmacy.id:
+                cart.items.all().delete()
+                cart.pharmacy = pharmacy
+                cart.save(update_fields=["pharmacy", "updated_at"])
 
         medicine_id = request.data.get("medicine_id")
         quantity = int(request.data.get("quantity", 1))
         if medicine_id:
+            if not cart.pharmacy_id:
+                return Response({"detail": "Select a pharmacy before adding medicine."}, status=400)
+            inventory = get_object_or_404(
+                InventoryItem,
+                pharmacy_id=cart.pharmacy_id,
+                medicine_id=medicine_id,
+            )
+            if inventory.quantity_in_stock < quantity:
+                return Response({"detail": "Requested quantity is not available."}, status=400)
             item, _ = cart.items.get_or_create(medicine_id=medicine_id)
             item.quantity = quantity
             item.save()
         return Response(CartSerializer(cart).data, status=status.HTTP_200_OK)
-
-
-class BuildCartFromPrescriptionView(APIView):
-    """FR-09: prescription -> suggested cart."""
-
-    permission_classes = [IsCustomer]
-
-    def post(self, request, prescription_id):
-        prescription = get_object_or_404(Prescription, id=prescription_id, customer__user=request.user)
-        cart, _ = Cart.objects.get_or_create(customer=_profile(request))
-        services.build_cart_from_prescription(cart, prescription)
-        return Response(CartSerializer(cart).data)
 
 
 class PlaceOrderView(APIView):

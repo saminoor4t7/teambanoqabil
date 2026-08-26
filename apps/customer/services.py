@@ -33,22 +33,6 @@ def request_ai_prescription_extraction(prescription):
         return None
 
 
-def build_cart_from_prescription(cart, prescription):
-    """FR-09: prescription -> suggested cart. Only pulls items that a
-    pharmacist has already confirmed (or, in low-risk MVP mode, high
-    confidence + matched items) — never auto-adds unmatched/ambiguous
-    lines."""
-    cart.items.all().delete()
-    cart.prescription = prescription
-    cart.save(update_fields=["prescription"])
-    for item in prescription.items.filter(medicine__isnull=False):
-        if item.pharmacist_confirmed or (item.confidence or 0) >= 0.85:
-            cart_item, _ = cart.items.get_or_create(medicine=item.medicine)
-            cart_item.quantity = item.quantity or 1
-            cart_item.save()
-    return cart
-
-
 @transaction.atomic
 def place_order_from_cart(cart, delivery_address, payment_method):
     from apps.orders.models import Order, OrderItem
@@ -71,14 +55,19 @@ def place_order_from_cart(cart, delivery_address, payment_method):
 
     for cart_item in cart.items.select_related("medicine"):
         inventory = InventoryItem.objects.filter(pharmacy=pharmacy, medicine=cart_item.medicine).first()
-        if inventory and inventory.quantity_in_stock < cart_item.quantity:
+        if not inventory:
+            raise ValueError(f"{cart_item.medicine} is not available at {pharmacy}.")
+        if inventory.quantity_in_stock < cart_item.quantity:
             raise ValueError(f"Insufficient stock for {cart_item.medicine}.")
 
         OrderItem.objects.create(
             order=order,
             medicine=cart_item.medicine,
             quantity=cart_item.quantity,
-            unit_price=inventory.selling_price if inventory else 0,
+            unit_price=(
+                inventory.selling_price * (1 - inventory.discount_percentage / 100)
+                
+            ),
         )
 
     order.recalc_total()

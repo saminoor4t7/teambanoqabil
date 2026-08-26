@@ -43,6 +43,10 @@ class Prescription(models.Model):
     ]
 
     customer = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name="prescriptions")
+    pharmacy = models.ForeignKey(
+        "medical_store.PharmacyProfile", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="prescriptions",
+    )
     file = models.FileField(upload_to="prescriptions/%Y/%m/")
     source = models.CharField(
         max_length=20, choices=[("camera", "Camera"), ("gallery", "Gallery"), ("pdf", "PDF")], default="camera"
