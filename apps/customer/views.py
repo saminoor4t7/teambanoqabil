@@ -7,10 +7,11 @@ from apps.accounts.models import AuditLog
 from apps.medical_store.models import InventoryItem, PharmacyProfile
 
 from . import services
-from .models import Address, Cart, CustomerProfile, Prescription
+from .models import Address, Cart, CartItem, CustomerProfile, Prescription
 from .permissions import IsCustomer
 from .serializers import (
     AddressSerializer,
+    CartItemSerializer,
     CartSerializer,
     CustomerProfileSerializer,
     PlaceOrderSerializer,
@@ -119,6 +120,94 @@ class CartView(APIView):
             item.quantity = quantity
             item.save()
         return Response(CartSerializer(cart).data, status=status.HTTP_200_OK)
+
+    def delete(self, request):
+        """Clear the entire cart."""
+        cart, _ = Cart.objects.get_or_create(customer=_profile(request))
+        cart.items.all().delete()
+        cart.pharmacy = None
+        cart.prescription = None
+        cart.coupon_code = ""
+        cart.save(update_fields=["pharmacy", "prescription", "coupon_code", "updated_at"])
+        return Response({"detail": "Cart cleared successfully."}, status=status.HTTP_204_NO_CONTENT)
+
+    def patch(self, request):
+        """Update cart attributes (coupon_code, prescription, etc.)."""
+        cart, _ = Cart.objects.get_or_create(customer=_profile(request))
+        
+        # Allow updating coupon_code
+        if "coupon_code" in request.data:
+            cart.coupon_code = request.data.get("coupon_code", "")
+        
+        # Allow updating prescription
+        if "prescription_id" in request.data:
+            prescription_id = request.data.get("prescription_id")
+            if prescription_id:
+                prescription = get_object_or_404(
+                    Prescription, id=prescription_id, customer=_profile(request)
+                )
+                cart.prescription = prescription
+            else:
+                cart.prescription = None
+        
+        cart.save()
+        return Response(CartSerializer(cart).data, status=status.HTTP_200_OK)
+
+
+class CartItemViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing individual cart items."""
+    serializer_class = CartItemSerializer
+    permission_classes = [IsCustomer]
+    http_method_names = ["get", "delete", "patch", "head"]
+
+    def get_queryset(self):
+        profile = _profile(self.request)
+        return CartItem.objects.filter(cart__customer=profile)
+
+    def get_object(self):
+        """Get the cart item, ensuring it belongs to the current user's cart."""
+        item = get_object_or_404(
+            CartItem,
+            id=self.kwargs.get("pk"),
+            cart__customer=_profile(self.request)
+        )
+        return item
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete a specific cart item."""
+        item = self.get_object()
+        item.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def partial_update(self, request, *args, **kwargs):
+        """Update cart item quantity."""
+        item = self.get_object()
+        quantity = request.data.get("quantity")
+        
+        if quantity is not None:
+            quantity = int(quantity)
+            if quantity <= 0:
+                item.delete()
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            
+            # Validate stock availability
+            cart = item.cart
+            if cart.pharmacy:
+                inventory = get_object_or_404(
+                    InventoryItem,
+                    pharmacy_id=cart.pharmacy_id,
+                    medicine_id=item.medicine_id,
+                )
+                if inventory.quantity_in_stock < quantity:
+                    return Response(
+                        {"detail": "Requested quantity is not available."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            item.quantity = quantity
+            item.save()
+        
+        return Response(CartItemSerializer(item).data, status=status.HTTP_200_OK)
 
 
 class PlaceOrderView(APIView):

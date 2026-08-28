@@ -228,7 +228,10 @@ const Customer = (() => {
     await UI.withLoading(container, async () => {
       const cart = await API.get("/customer/cart/");
       const items = (cart.items || []).filter((i) => i.quantity > 0);
-      const subtotal = items.reduce((s, i) => s + Number(i.line_total || 0), 0);
+      const subtotal = Number(cart.subtotal || 0);
+      const discountTotal = Number(cart.discount_total || 0);
+      const deliveryFee = Number(cart.delivery_fee || 0);
+      const grandTotal = Number(cart.grand_total || 0);
       container.innerHTML = `
         <div class="page-header">
           <div><h2>Your Cart</h2><div class="desc">${cart.pharmacy ? "Pharmacy: " + UI.esc(cart.pharmacy.business_name) : "No pharmacy selected yet"}</div></div>
@@ -245,8 +248,9 @@ const Customer = (() => {
             <div class="card">
               <div class="card-title">Summary</div>
               <div class="summary-row"><span>Subtotal</span><b>${UI.money(subtotal)}</b></div>
-              <div class="summary-row"><span>Delivery fee</span><span class="hint">set by backend at placement</span></div>
-              <div class="summary-row total"><span>Total (est.)</span><span>${UI.money(subtotal)}</span></div>
+              <div class="summary-row"><span>Medicine discount</span><span>-${UI.money(discountTotal)}</span></div>
+              <div class="summary-row"><span>Delivery fee</span><span>${UI.money(deliveryFee)}</span></div>
+              <div class="summary-row total"><span>Total (est.)</span><span>${UI.money(grandTotal)}</span></div>
               <button class="btn block" id="go-checkout" ${items.length === 0 || !cart.pharmacy ? "disabled" : ""}>Proceed to Checkout</button>
             </div>
             <div class="card" style="margin-top:14px">

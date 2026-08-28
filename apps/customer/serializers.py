@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.conf import settings
 from rest_framework import serializers
 
 from apps.catalog.serializers import MedicineSerializer
@@ -109,13 +110,14 @@ class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
     subtotal = serializers.SerializerMethodField()
     discount_total = serializers.SerializerMethodField()
+    delivery_fee = serializers.SerializerMethodField()
     grand_total = serializers.SerializerMethodField()
 
     class Meta:
         model = Cart
         fields = [
             "id", "customer", "pharmacy", "prescription", "coupon_code", "items",
-            "subtotal", "discount_total", "grand_total", "updated_at",
+            "subtotal", "discount_total", "delivery_fee", "grand_total", "updated_at",
         ]
         read_only_fields = ["customer"]
 
@@ -140,9 +142,12 @@ class CartSerializer(serializers.ModelSerializer):
     def get_discount_total(self, obj):
         return self._totals(obj)[1]
 
+    def get_delivery_fee(self, obj):
+        return Decimal(str(settings.DELIVERY_FEE))
+
     def get_grand_total(self, obj):
         subtotal, discount_total = self._totals(obj)
-        return subtotal - discount_total
+        return subtotal - discount_total + Decimal(str(settings.DELIVERY_FEE))
 
 
 class PlaceOrderSerializer(serializers.Serializer):
