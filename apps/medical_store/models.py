@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from django.core.validators import MaxValueValidator, MinValueValidator
+from decimal import Decimal
 
 
 class PharmacyProfile(models.Model):
@@ -25,7 +26,11 @@ class InventoryItem(models.Model):
     medicine = models.ForeignKey("catalog.Medicine", on_delete=models.CASCADE, related_name="inventory_items")
     quantity_in_stock = models.PositiveIntegerField(default=0)
     reorder_threshold = models.PositiveIntegerField(default=10)  # feeds low-stock visibility (FR-13)
-    selling_price = models.DecimalField(max_digits=10, decimal_places=2)
+    selling_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
     discount_percentage = models.DecimalField(
         max_digits=5,
         decimal_places=2,

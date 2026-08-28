@@ -23,6 +23,8 @@ class MyOrdersView(generics.ListAPIView):
             return Order.objects.filter(pharmacy__user=user)
         if user.role == "rider":
             return Order.objects.filter(delivery__rider__user=user)
+        if user.is_superuser or user.role == "admin":
+            return Order.objects.all()
         return Order.objects.none()
 
 
@@ -52,7 +54,10 @@ class RequestRefundView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, order_id):
-        order = get_object_or_404(Order, id=order_id, customer__user=request.user)
+        order_filter = {"id": order_id}
+        if not (request.user.is_superuser or request.user.role == "admin"):
+            order_filter["customer__user"] = request.user
+        order = get_object_or_404(Order, **order_filter)
         serializer = RefundSerializer(data={**request.data, "order": order.id})
         serializer.is_valid(raise_exception=True)
         serializer.save()

@@ -51,14 +51,19 @@ def place_order_from_cart(cart, delivery_address, payment_method):
         delivery_address=delivery_address,
         payment_method=payment_method,
         coupon_code=cart.coupon_code,
+        delivery_fee=settings.DELIVERY_FEE,
     )
 
     for cart_item in cart.items.select_related("medicine"):
-        inventory = InventoryItem.objects.filter(pharmacy=pharmacy, medicine=cart_item.medicine).first()
+        inventory = InventoryItem.objects.select_for_update().filter(
+            pharmacy=pharmacy, medicine=cart_item.medicine
+        ).first()
         if not inventory:
             raise ValueError(f"{cart_item.medicine} is not available at {pharmacy}.")
         if inventory.quantity_in_stock < cart_item.quantity:
             raise ValueError(f"Insufficient stock for {cart_item.medicine}.")
+        if inventory.selling_price <= 0 or inventory.discount_percentage >= 100:
+            raise ValueError(f"{cart_item.medicine} has no valid selling price at {pharmacy}.")
 
         OrderItem.objects.create(
             order=order,
@@ -69,6 +74,8 @@ def place_order_from_cart(cart, delivery_address, payment_method):
                 
             ),
         )
+        inventory.quantity_in_stock -= cart_item.quantity
+        inventory.save(update_fields=["quantity_in_stock", "updated_at"])
 
     order.recalc_total()
     cart.items.all().delete()

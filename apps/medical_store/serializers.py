@@ -36,7 +36,7 @@ class InventoryItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = InventoryItem
         fields = ["id", "pharmacy", "medicine", "medicine_id", "quantity_in_stock",
-                  "reorder_threshold", "selling_price", "is_low_stock", "updated_at"]
+                  "reorder_threshold", "selling_price", "discount_percentage", "is_low_stock", "updated_at"]
         read_only_fields = ["pharmacy"]
 
 

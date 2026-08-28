@@ -29,6 +29,11 @@ const Auth = (() => {
     document.getElementById("app").innerHTML = page("Log in to your account", `
       <form id="login-form">
         <div class="banner error" id="auth-error" style="display:${msg ? "block" : "none"}">${UI.esc(msg)}</div>
+        <div class="field"><label>Account type</label><select class="input" name="role" required>
+          <option value="customer">Customer</option>
+          <option value="pharmacy">Pharmacy</option>
+          <option value="rider">Rider</option>
+        </select></div>
         <div class="field"><label>Email</label><input class="input" name="email" type="email" required placeholder="you@example.com" /></div>
         <div class="field"><label>Password</label><input class="input" name="password" type="password" required placeholder="••••••••" /></div>
         <button class="btn block" type="submit" id="login-btn">Log In</button>
@@ -51,6 +56,7 @@ const Auth = (() => {
         const data = await API.post("/accounts/login/", {
           email: f.email.value.trim(),
           password: f.password.value,
+          role: f.role.value,
         });
         Session.save(data);
         UI.toast(`Welcome back, ${data.user.username}!`, "success");
@@ -155,6 +161,7 @@ const Auth = (() => {
       try {
         const data = await API.post("/accounts/register/verify/", {
           email: pendingEmail,
+          role: lastRegPayload.role,
           code: e.target.code.value.trim(),
         });
         Session.save(data);

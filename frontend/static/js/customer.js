@@ -159,6 +159,11 @@ const Customer = (() => {
       if (shopState.category) params.set("category", shopState.category);
       if (shopState.rx) params.set("requires_prescription", shopState.rx);
       const data = API.unwrap(await API.get(`/catalog/medicines/?${params}`));
+      const pharmacy = await currentCartPharmacy();
+      const inventoryData = pharmacy
+        ? API.unwrap(await API.get(`/pharmacy/${pharmacy.id}/inventory/`))
+        : { results: [] };
+      const inventoryByMedicine = new Map(inventoryData.results.map((item) => [item.medicine.id, item]));
       shopState.meds = data.results;
       if (!data.results.length) {
         box.innerHTML = UI.emptyState("No medicines found", "Try a different search, or seed demo data from Test Utilities.");
@@ -166,7 +171,7 @@ const Customer = (() => {
       }
       box.innerHTML = `
         <div class="med-grid">
-          ${data.results.map(medCard).join("")}
+          ${data.results.map((medicine) => medCard(medicine, inventoryByMedicine.get(medicine.id))).join("")}
         </div>
         ${UI.pager(shopState.page, data.count, PAGE_SIZE, (p) => { shopState.page = p; loadMeds(); })}`;
       box.querySelectorAll("[data-add]").forEach((btn) => {
@@ -175,7 +180,11 @@ const Customer = (() => {
     });
   }
 
-  function medCard(m) {
+  function medCard(m, inventory) {
+    const available = inventory && inventory.quantity_in_stock > 0;
+    const discountedPrice = inventory
+      ? Number(inventory.selling_price) * (1 - Number(inventory.discount_percentage || 0) / 100)
+      : 0;
     return `
       <div class="card med-card">
         <div class="med-tags">
@@ -187,12 +196,13 @@ const Customer = (() => {
           <div class="med-name">${UI.esc(m.name)}</div>
           <div class="med-generic">${UI.esc(m.generic_name || "")}${m.brand ? " · " + UI.esc(m.brand.name) : ""}</div>
         </div>
+        <div class="med-price">${available ? `${UI.money(discountedPrice)}${inventory.discount_percentage > 0 ? ` <span class="hint">(${inventory.discount_percentage}% off)</span>` : ""}` : "Not available at this pharmacy"}</div>
         ${m.description ? `<div class="hint" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${UI.esc(m.description)}</div>` : ""}
         <div class="med-foot">
           <span class="hint">#${m.id}</span>
           <div class="add-row">
             <input type="number" class="input qty-input" min="1" value="1" />
-            <button class="btn sm" data-add="${m.id}">Add to Cart</button>
+            <button class="btn sm" data-add="${m.id}" ${available ? "" : "disabled"}>${available ? "Add to Cart" : "Unavailable"}</button>
           </div>
         </div>
       </div>`;

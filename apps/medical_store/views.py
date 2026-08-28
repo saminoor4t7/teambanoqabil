@@ -42,7 +42,7 @@ class PharmacyDirectoryView(generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        return PharmacyProfile.objects.filter(is_open=True).order_by("business_name")
+        return PharmacyProfile.objects.filter(is_verified=True, is_open=True).order_by("business_name")
 
 
 class MyPharmacyView(generics.RetrieveUpdateAPIView):
@@ -68,6 +68,19 @@ class PharmacyDetailView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     queryset = PharmacyProfile.objects.filter(is_verified=True, is_open=True)
     lookup_url_kwarg = "pharmacy_id"
+
+
+class CustomerInventoryView(generics.ListAPIView):
+    serializer_class = InventoryItemSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return InventoryItem.objects.filter(
+            pharmacy_id=self.kwargs["pharmacy_id"],
+            pharmacy__is_verified=True,
+            pharmacy__is_open=True,
+            medicine__is_active=True,
+        ).select_related("medicine", "medicine__category", "medicine__brand")
 
 
 class NearbyPharmacyView(generics.ListAPIView):
@@ -123,6 +136,8 @@ class InventoryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsPharmacy]
 
     def get_queryset(self):
+        if self.request.user.is_superuser or self.request.user.role == "admin":
+            return InventoryItem.objects.all()
         return InventoryItem.objects.filter(pharmacy__user=self.request.user)
 
     def perform_create(self, serializer):
@@ -136,7 +151,8 @@ class IncomingOrdersView(generics.ListAPIView):
     permission_classes = [IsPharmacy]
 
     def get_queryset(self):
-        return Order.objects.filter(pharmacy__user=self.request.user).exclude(
+        queryset = Order.objects.all() if self.request.user.is_superuser or self.request.user.role == "admin" else Order.objects.filter(pharmacy__user=self.request.user)
+        return queryset.exclude(
             status__in=[OrderStatus.DELIVERED, OrderStatus.CANCELLED]
         )
 
@@ -186,7 +202,8 @@ class IncomingPrescriptionsView(generics.ListAPIView):
     permission_classes = [IsPharmacy]
 
     def get_queryset(self):
-        return Prescription.objects.filter(pharmacy__user=self.request.user).order_by("-created_at")
+        queryset = Prescription.objects.all() if self.request.user.is_superuser or self.request.user.role == "admin" else Prescription.objects.filter(pharmacy__user=self.request.user)
+        return queryset.order_by("-created_at")
 
 
 class DemandForecastView(generics.ListAPIView):
@@ -197,4 +214,5 @@ class DemandForecastView(generics.ListAPIView):
     permission_classes = [IsPharmacy]
 
     def get_queryset(self):
-        return DemandForecast.objects.filter(pharmacy__user=self.request.user).order_by("-generated_at")
+        queryset = DemandForecast.objects.all() if self.request.user.is_superuser or self.request.user.role == "admin" else DemandForecast.objects.filter(pharmacy__user=self.request.user)
+        return queryset.order_by("-generated_at")

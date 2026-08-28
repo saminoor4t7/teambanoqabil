@@ -36,6 +36,8 @@ class AddressViewSet(viewsets.ModelViewSet):
     permission_classes = [IsCustomer]
 
     def get_queryset(self):
+        if self.request.user.is_superuser or self.request.user.role == "admin":
+            return Address.objects.all()
         return Address.objects.filter(customer__user=self.request.user)
 
     def perform_create(self, serializer):
@@ -50,6 +52,8 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "head"]
 
     def get_queryset(self):
+        if self.request.user.is_superuser or self.request.user.role == "admin":
+            return Prescription.objects.all()
         return Prescription.objects.filter(customer__user=self.request.user)
 
     def perform_create(self, serializer):
@@ -107,6 +111,8 @@ class CartView(APIView):
                 pharmacy_id=cart.pharmacy_id,
                 medicine_id=medicine_id,
             )
+            if inventory.selling_price <= 0 or inventory.discount_percentage >= 100:
+                return Response({"detail": "This medicine has no valid price at the selected pharmacy."}, status=400)
             if inventory.quantity_in_stock < quantity:
                 return Response({"detail": "Requested quantity is not available."}, status=400)
             item, _ = cart.items.get_or_create(medicine_id=medicine_id)

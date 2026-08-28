@@ -12,6 +12,7 @@ from .views import (
     PharmacyDetailView,
     PharmacyDirectoryView,
     PharmacyListView,
+    CustomerInventoryView,
 
     VerifyPrescriptionView,
 )
@@ -24,6 +25,7 @@ urlpatterns = [
     path("list/", PharmacyListView.as_view(), name="pharmacy-list"),
     path("directory/", PharmacyDirectoryView.as_view(), name="pharmacy-directory"),
     path("nearby/", NearbyPharmacyView.as_view(), name="nearby-pharmacies"),
+    path("<int:pharmacy_id>/inventory/", CustomerInventoryView.as_view(), name="customer-pharmacy-inventory"),
     path("<int:pharmacy_id>/", PharmacyDetailView.as_view(), name="pharmacy-detail"),
 
     path("orders/incoming/", IncomingOrdersView.as_view(), name="incoming-orders"),
