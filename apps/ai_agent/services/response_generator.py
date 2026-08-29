@@ -22,10 +22,10 @@ from django.db import transaction
 
 from apps.catalog.models import Medicine
 from apps.catalog.serializers import MedicineSerializer
+from apps.ai_agent.models import ChatMessage, ChatSession
 
 from . import image_analyzer, medicine_matcher, nlp_engine, ollama_client
 from .language_processor import preprocess
-from .models import ChatMessage, ChatSession
 
 logger = logging.getLogger(__name__)
 

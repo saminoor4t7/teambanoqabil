@@ -91,7 +91,7 @@ def match_image(image_data: bytes | Image.Image, top_k: int = 5, min_score: floa
     Returns [{"medicine": Medicine, "score": float}, ...] sorted by
     descending similarity.
     """
-    from .models import MedicineEmbedding
+    from apps.ai_agent.models import MedicineEmbedding
 
     query_vec = compute_image_embedding(image_data)
 

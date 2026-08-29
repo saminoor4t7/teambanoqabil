@@ -74,6 +74,26 @@ const Customer = (() => {
   // ---------- Shop ----------
   async function renderShop(container) {
     await ensureProfile();
+
+    let ph = await currentCartPharmacy();
+    if (!ph) {
+      ph = await openPharmacyPicker();
+    }
+    if (!ph) {
+      container.innerHTML = `
+        <div class="page-header">
+          <div><h2>Medicine Store</h2><div class="desc">Choose a pharmacy first to see available medicines and prices.</div></div>
+          <button class="btn" id="pick-pharmacy">Select Pharmacy</button>
+        </div>
+        <div id="shop-results"></div>`;
+      document.getElementById("pick-pharmacy").onclick = async () => {
+        const selected = await openPharmacyPicker();
+        if (selected) await renderShop(container);
+      };
+      return;
+    }
+
+    localStorage.setItem("mp_cart_pharmacy", JSON.stringify(ph));
     container.innerHTML = `
       <div class="page-header">
         <div><h2>Medicine Store</h2><div class="desc">Browse the verified catalog and add medicines to your cart.</div></div>
@@ -96,9 +116,8 @@ const Customer = (() => {
     const rxSel = document.getElementById("shop-rx");
     rxSel.value = shopState.rx;
 
-    const [catData, ph] = await Promise.all([
+    const [catData] = await Promise.all([
       API.unwrap(API.get("/catalog/categories/")),
-      currentCartPharmacy(),
     ]);
     shopState.categories = catData.results || [];
     shopState.categories.forEach((c) => {
@@ -112,7 +131,11 @@ const Customer = (() => {
     renderPhBar(ph);
     document.getElementById("switch-ph").onclick = async () => {
       const newPh = await openPharmacyPicker();
-      renderPhBar(newPh);
+      if (newPh) {
+        localStorage.setItem("mp_cart_pharmacy", JSON.stringify(newPh));
+        renderPhBar(newPh);
+        await loadMeds();
+      }
     };
 
     const doSearch = (page = 1) => {
@@ -153,16 +176,20 @@ const Customer = (() => {
 
   async function loadMeds() {
     const box = document.getElementById("shop-results");
+    const pharmacy = await currentCartPharmacy();
+    if (!pharmacy) {
+      box.innerHTML = UI.emptyState("Select a pharmacy first", "Choose a pharmacy to browse medicine prices and inventory.");
+      return;
+    }
+
     await UI.withLoading(box, async () => {
       const params = new URLSearchParams({ page: shopState.page });
       if (shopState.q) params.set("q", shopState.q);
       if (shopState.category) params.set("category", shopState.category);
       if (shopState.rx) params.set("requires_prescription", shopState.rx);
+      params.set("pharmacy_id", pharmacy.id);
       const data = API.unwrap(await API.get(`/catalog/medicines/?${params}`));
-      const pharmacy = await currentCartPharmacy();
-      const inventoryData = pharmacy
-        ? API.unwrap(await API.get(`/pharmacy/${pharmacy.id}/inventory/`))
-        : { results: [] };
+      const inventoryData = API.unwrap(await API.get(`/pharmacy/${pharmacy.id}/inventory/`));
       const inventoryByMedicine = new Map(inventoryData.results.map((item) => [item.medicine.id, item]));
       shopState.meds = data.results;
       if (!data.results.length) {
@@ -181,10 +208,14 @@ const Customer = (() => {
   }
 
   function medCard(m, inventory) {
-    const available = inventory && inventory.quantity_in_stock > 0;
-    const discountedPrice = inventory
-      ? Number(inventory.selling_price) * (1 - Number(inventory.discount_percentage || 0) / 100)
-      : 0;
+    const inventoryPrice = inventory ? Number(inventory.selling_price) : Number(m.price || 0);
+    const inventoryDiscount = inventory ? Number(inventory.discount_percentage || 0) : Number(m.discount_percentage || 0);
+    const stockQty = inventory ? Number(inventory.quantity_in_stock || 0) : Number(m.quantity_in_stock || 0);
+    const available = stockQty > 0;
+    const discountedPrice = inventoryPrice * (1 - inventoryDiscount / 100);
+    const priceLabel = available
+      ? `${UI.money(discountedPrice)}${inventoryDiscount > 0 ? ` <span class="hint">(${inventoryDiscount}% off)</span>` : ""}`
+      : "No stock available";
     return `
       <div class="card med-card">
         <div class="med-tags">
@@ -196,7 +227,7 @@ const Customer = (() => {
           <div class="med-name">${UI.esc(m.name)}</div>
           <div class="med-generic">${UI.esc(m.generic_name || "")}${m.brand ? " · " + UI.esc(m.brand.name) : ""}</div>
         </div>
-        <div class="med-price">${available ? `${UI.money(discountedPrice)}${inventory.discount_percentage > 0 ? ` <span class="hint">(${inventory.discount_percentage}% off)</span>` : ""}` : "Not available at this pharmacy"}</div>
+        <div class="med-price">${priceLabel}</div>
         ${m.description ? `<div class="hint" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${UI.esc(m.description)}</div>` : ""}
         <div class="med-foot">
           <span class="hint">#${m.id}</span>

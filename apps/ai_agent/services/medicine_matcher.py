@@ -73,7 +73,7 @@ def build_embeddings(force: bool = False) -> int:
     Skips medicines whose text hasn't changed (checked via fingerprint)
     unless *force* is True. Returns the number of embeddings created/updated.
     """
-    from .models import MedicineEmbedding
+    from apps.ai_agent.models import MedicineEmbedding
 
     medicines = Medicine.objects.filter(is_active=True).select_related("category", "brand")
     texts = [_medicine_text(m) for m in medicines]
@@ -116,7 +116,7 @@ def search(
     Returns a list of dicts: [{"medicine": Medicine, "score": float}, ...]
     sorted by descending cosine similarity.
     """
-    from .models import MedicineEmbedding
+    from apps.ai_agent.models import MedicineEmbedding
 
     # Preprocess: detect language, normalise, translate to English
     _normalised, english_query, _lang = preprocess(query)
@@ -165,7 +165,7 @@ def search(
 
 def search_by_category(category_name: str, top_k: int = 20) -> list[dict]:
     """Return all medicines in a category, ranked by relevance to the category name."""
-    from .models import MedicineEmbedding
+    from apps.ai_agent.models import MedicineEmbedding
 
     meds = Medicine.objects.filter(
         is_active=True,
