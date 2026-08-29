@@ -20,6 +20,8 @@ urlpatterns = [
     path("rider/", include("apps.rider.urls")),
     # Interconnection hub: orders + delivery lifecycle
     path("orders/", include("apps.orders.urls")),
+    # AI Agent: chat, semantic search, image matching
+    path("ai/", include("apps.ai_agent.urls")),
 ]
 
 if settings.DEBUG:

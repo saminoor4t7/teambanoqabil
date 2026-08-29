@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     "apps.medical_store",
     "apps.rider",
     "apps.orders",
+    # AI Agent (local NLP + semantic search + Ollama)
+    "apps.ai_agent",
 ]
 
 MIDDLEWARE = [
@@ -140,3 +142,8 @@ CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 # Base URL of the separate AI microservice (Vision/OCR + LLM/RAG), called
 # by apps.customer.services.ai_client — never called directly from models.
 AI_SERVICE_BASE_URL = "http://localhost:9000"
+
+# ── AI Agent settings (local models — no external API keys needed) ────
+OLLAMA_BASE_URL = "http://localhost:11434"  # locally running Ollama server
+OLLAMA_MODEL = "llama3.2:3b"                # small, fast model for chat
+OLLAMA_TIMEOUT = 30                          # seconds before fallback
