@@ -1,4 +1,4 @@
-"""
+﻿"""
 Medical Panda 2.0 — Django settings.
 
 Architecture note (see docs/ARCHITECTURE.md):
@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "apps.medical_store",
     "apps.rider",
     "apps.orders",
+    "apps.ai_assistant",
 ]
 
 MIDDLEWARE = [
@@ -139,3 +140,9 @@ CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 # Base URL of the separate AI microservice (Vision/OCR + LLM/RAG), called
 # by apps.customer.services.ai_client — never called directly from models.
 AI_SERVICE_BASE_URL = "http://localhost:9000"
+
+
+# ── Google Gemini AI Assistant ──
+# Get a free API key from https://aistudio.google.com/apikey
+GEMINI_API_KEY = "AQ.Ab8RN6JhT4dWOvkKfh5DhKzmlz64FUdvAI1L4AADYet1i0gK2Q"  # <-- paste your Gemini API key here
+GEMINI_MODEL = "gemini-3.6-flash"

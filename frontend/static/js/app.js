@@ -111,6 +111,7 @@ const App = (() => {
 
     buildNav();
     refreshCartBadge();
+    if (typeof PandaAI !== 'undefined') PandaAI.init();
   }
 
   function buildNav() {
@@ -175,6 +176,7 @@ const App = (() => {
       TITLES[base] || (base === "#/orders" ? `Order #${rest}` : "");
     buildNav();
     refreshCartBadge();
+    if (typeof PandaAI !== 'undefined') PandaAI.init();
 
     if (handler) handler();
     else {

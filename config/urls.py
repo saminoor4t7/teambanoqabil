@@ -20,6 +20,8 @@ urlpatterns = [
     path("rider/", include("apps.rider.urls")),
     # Interconnection hub: orders + delivery lifecycle
     path("orders/", include("apps.orders.urls")),
+    # AI Assistant (Panda AI)
+    path("ai/", include("apps.ai_assistant.urls")),
 ]
 
 if settings.DEBUG:
