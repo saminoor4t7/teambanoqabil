@@ -42,7 +42,10 @@ INSTALLED_APPS = [
     "apps.medical_store",
     "apps.rider",
     "apps.orders",
+    # AI Agent (local NLP + semantic search + Ollama)
+    "apps.ai_agent",
     "apps.ai_assistant",
+
 ]
 
 MIDDLEWARE = [
@@ -127,6 +130,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 DEFAULT_FROM_EMAIL = "sussbhoo@gmail.com"
+DELIVERY_FEE = 20
 EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_HOST_USER = "sussbhoo@gmail.com"
@@ -142,7 +146,13 @@ CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 AI_SERVICE_BASE_URL = "http://localhost:9000"
 
 
+# ── AI Agent settings (local models — no external API keys needed) ────
+OLLAMA_BASE_URL = "http://localhost:11434"  # locally running Ollama server
+OLLAMA_MODEL = "llama3.2:3b"                # small, fast model for chat
+OLLAMA_TIMEOUT = 30                          # seconds before fallback
+
 # ── Google Gemini AI Assistant ──
 # Get a free API key from https://aistudio.google.com/apikey
-GEMINI_API_KEY = "AQ.Ab8RN6JhT4dWOvkKfh5DhKzmlz64FUdvAI1L4AADYet1i0gK2Q"  # <-- paste your Gemini API key here
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")  # set via env to avoid committing secrets
 GEMINI_MODEL = "gemini-3.6-flash"
+

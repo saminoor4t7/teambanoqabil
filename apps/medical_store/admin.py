@@ -11,7 +11,10 @@ class PharmacyProfileAdmin(admin.ModelAdmin):
 
 @admin.register(InventoryItem)
 class InventoryItemAdmin(admin.ModelAdmin):
-    list_display = ["pharmacy", "medicine", "quantity_in_stock", "reorder_threshold", "selling_price"]
+    list_display = [
+        "pharmacy", "medicine", "quantity_in_stock", "reorder_threshold", "selling_price",
+        "discount_percentage",
+    ]
     list_filter = ["pharmacy"]
 
 

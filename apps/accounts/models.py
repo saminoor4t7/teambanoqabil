@@ -1,4 +1,5 @@
 from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import models
 
 
@@ -19,27 +20,40 @@ class User(AbstractUser):
     Order.pharmacy, Delivery.rider all ultimately point back to a User).
     """
 
+    username = models.CharField(
+        max_length=150,
+        validators=[UnicodeUsernameValidator()],
+        error_messages={"unique": "A user with that username already exists for this role."},
+    )
     role = models.CharField(max_length=20, choices=Role.choices)
-    phone_number = models.CharField(max_length=20, unique=True)
+    phone_number = models.CharField(max_length=20)
     phone_verified = models.BooleanField(default=False)
     is_active_on_platform = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    REQUIRED_FIELDS = ["email", "role", "phone_number"]
+    USERNAME_FIELD = "id"
+    REQUIRED_FIELDS = ["username", "email", "role", "phone_number"]
 
     def __str__(self):
         return f"{self.username} ({self.role})"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["username", "role"], name="unique_user_username_per_role"),
+            models.UniqueConstraint(fields=["email", "role"], name="unique_user_email_per_role"),
+            models.UniqueConstraint(fields=["phone_number", "role"], name="unique_user_phone_per_role"),
+        ]
 
 
 class PendingRegistration(models.Model):
     """Temporary registration data; it becomes a User only after OTP verification."""
 
-    username = models.CharField(max_length=150, unique=True)
-    email = models.EmailField(unique=True)
+    username = models.CharField(max_length=150)
+    email = models.EmailField()
     password_hash = models.CharField(max_length=128)
     role = models.CharField(max_length=20, choices=Role.choices)
-    phone_number = models.CharField(max_length=20, unique=True)
+    phone_number = models.CharField(max_length=20)
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
     otp_code = models.CharField(max_length=6)
@@ -48,6 +62,13 @@ class PendingRegistration(models.Model):
 
     def __str__(self):
         return f"Pending registration for {self.email}"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["username", "role"], name="unique_pending_username_per_role"),
+            models.UniqueConstraint(fields=["email", "role"], name="unique_pending_email_per_role"),
+            models.UniqueConstraint(fields=["phone_number", "role"], name="unique_pending_phone_per_role"),
+        ]
 
 
 class AuditLog(models.Model):

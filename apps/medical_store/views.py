@@ -1,9 +1,14 @@
+from math import asin, cos, radians, sin, sqrt
+
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, serializers, status, viewsets
+from rest_framework.exceptions import ValidationError
+
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.customer.models import Prescription
+from apps.customer.serializers import PrescriptionSerializer
 from apps.orders.models import Order, OrderStatus
 from apps.orders.serializers import OrderSerializer
 
@@ -13,6 +18,7 @@ from .permissions import IsPharmacy
 from .serializers import (
     DemandForecastSerializer,
     InventoryItemSerializer,
+    NearbyPharmacySerializer,
     PharmacyProfileSerializer,
     PrescriptionReviewSerializer,
 )
@@ -36,7 +42,7 @@ class PharmacyDirectoryView(generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        return PharmacyProfile.objects.filter(is_open=True).order_by("business_name")
+        return PharmacyProfile.objects.filter(is_verified=True, is_open=True).order_by("business_name")
 
 
 class MyPharmacyView(generics.RetrieveUpdateAPIView):
@@ -51,11 +57,87 @@ class MyPharmacyView(generics.RetrieveUpdateAPIView):
         return profile
 
 
+class PharmacyListView(generics.ListAPIView):
+    serializer_class = PharmacyProfileSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    queryset = PharmacyProfile.objects.filter(is_verified=True, is_open=True).order_by("business_name")
+
+
+class PharmacyDetailView(generics.RetrieveAPIView):
+    serializer_class = PharmacyProfileSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    queryset = PharmacyProfile.objects.filter(is_verified=True, is_open=True)
+    lookup_url_kwarg = "pharmacy_id"
+
+
+class CustomerInventoryView(generics.ListAPIView):
+    serializer_class = InventoryItemSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return InventoryItem.objects.filter(
+            pharmacy_id=self.kwargs["pharmacy_id"],
+            pharmacy__is_verified=True,
+            pharmacy__is_open=True,
+            medicine__is_active=True,
+        ).select_related("medicine", "medicine__category", "medicine__brand")
+
+
+class NearbyPharmacyView(generics.ListAPIView):
+    serializer_class = NearbyPharmacySerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        latitude = self.request.query_params.get("latitude") or self.request.query_params.get("lat")
+        longitude = self.request.query_params.get("longitude") or self.request.query_params.get("lng")
+        if latitude is None or longitude is None:
+            raise ValidationError({"detail": "latitude and longitude are required."})
+
+        try:
+            self.customer_latitude = float(latitude)
+            self.customer_longitude = float(longitude)
+        except (TypeError, ValueError):
+            raise ValidationError({"detail": "latitude and longitude must be valid numbers."})
+
+        if not -90 <= self.customer_latitude <= 90 or not -180 <= self.customer_longitude <= 180:
+            raise ValidationError({"detail": "latitude or longitude is outside the valid range."})
+
+        pharmacies = PharmacyProfile.objects.filter(
+            is_verified=True, is_open=True,
+            latitude__isnull=False, longitude__isnull=False,
+        )
+        nearby = []
+        for pharmacy in pharmacies:
+            distance = self._distance_km(
+                self.customer_latitude, self.customer_longitude,
+                float(pharmacy.latitude), float(pharmacy.longitude),
+            )
+            if distance <= 10:
+                pharmacy.distance_km = round(distance, 2)
+                nearby.append(pharmacy)
+        return sorted(nearby, key=lambda pharmacy: pharmacy.distance_km)
+
+    @staticmethod
+    def _distance_km(latitude_one, longitude_one, latitude_two, longitude_two):
+        earth_radius_km = 6371
+        latitude_delta = radians(latitude_two - latitude_one)
+        longitude_delta = radians(longitude_two - longitude_one)
+        value = (
+            sin(latitude_delta / 2) ** 2
+            + cos(radians(latitude_one))
+            * cos(radians(latitude_two))
+            * sin(longitude_delta / 2) ** 2
+        )
+        return earth_radius_km * 2 * asin(sqrt(value))
+
+
 class InventoryViewSet(viewsets.ModelViewSet):
     serializer_class = InventoryItemSerializer
     permission_classes = [IsPharmacy]
 
     def get_queryset(self):
+        if self.request.user.is_superuser or self.request.user.role == "admin":
+            return InventoryItem.objects.all()
         return InventoryItem.objects.filter(pharmacy__user=self.request.user)
 
     def perform_create(self, serializer):
@@ -69,7 +151,8 @@ class IncomingOrdersView(generics.ListAPIView):
     permission_classes = [IsPharmacy]
 
     def get_queryset(self):
-        return Order.objects.filter(pharmacy__user=self.request.user).exclude(
+        queryset = Order.objects.all() if self.request.user.is_superuser or self.request.user.role == "admin" else Order.objects.filter(pharmacy__user=self.request.user)
+        return queryset.exclude(
             status__in=[OrderStatus.DELIVERED, OrderStatus.CANCELLED]
         )
 
@@ -103,13 +186,24 @@ class VerifyPrescriptionView(APIView):
     permission_classes = [IsPharmacy]
 
     def post(self, request, prescription_id):
-        prescription = get_object_or_404(Prescription, id=prescription_id)
+        prescription = get_object_or_404(
+            Prescription, id=prescription_id, pharmacy=_pharmacy(request)
+        )
         decision = request.data.get("decision")
         notes = request.data.get("notes", "")
         if decision not in ("approved", "rejected", "needs_info"):
             return Response({"detail": "Invalid decision."}, status=400)
         prescription = services.verify_prescription(prescription, _pharmacy(request), request.user, decision, notes)
         return Response({"prescription_id": prescription.id, "status": prescription.status})
+
+
+class IncomingPrescriptionsView(generics.ListAPIView):
+    serializer_class = PrescriptionSerializer
+    permission_classes = [IsPharmacy]
+
+    def get_queryset(self):
+        queryset = Prescription.objects.all() if self.request.user.is_superuser or self.request.user.role == "admin" else Prescription.objects.filter(pharmacy__user=self.request.user)
+        return queryset.order_by("-created_at")
 
 
 class DemandForecastView(generics.ListAPIView):
@@ -120,4 +214,5 @@ class DemandForecastView(generics.ListAPIView):
     permission_classes = [IsPharmacy]
 
     def get_queryset(self):
-        return DemandForecast.objects.filter(pharmacy__user=self.request.user).order_by("-generated_at")
+        queryset = DemandForecast.objects.all() if self.request.user.is_superuser or self.request.user.role == "admin" else DemandForecast.objects.filter(pharmacy__user=self.request.user)
+        return queryset.order_by("-generated_at")

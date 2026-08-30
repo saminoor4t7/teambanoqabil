@@ -45,6 +45,7 @@ class RegisterView(generics.CreateAPIView):
         try:
             pending, _ = PendingRegistration.objects.update_or_create(
                 email=data["email"],
+                role=data["role"],
                 defaults={
                     "username": data["username"],
                     "password_hash": make_password(data["password"]),
@@ -84,7 +85,7 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = User.objects.get(email__iexact=serializer.validated_data["user"].email)
+        user = serializer.validated_data["user"]
         return Response(
             {
                 "access": serializer.validated_data["access"],
@@ -119,7 +120,9 @@ class RegistrationOTPVerifyView(APIView):
         data = serializer.validated_data
 
         with transaction.atomic():
-            pending = PendingRegistration.objects.select_for_update().filter(email__iexact=data["email"]).first()
+            pending = PendingRegistration.objects.select_for_update().filter(
+                email__iexact=data["email"], role=data["role"]
+            ).first()
             if not pending:
                 return Response({"detail": "No pending registration with this email address."}, status=status.HTTP_404_NOT_FOUND)
             if pending.otp_code != data["code"] or pending.expires_at < timezone.now():

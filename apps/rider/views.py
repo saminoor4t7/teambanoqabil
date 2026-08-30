@@ -32,7 +32,8 @@ class MyAssignedDeliveriesView(generics.ListAPIView):
     permission_classes = [IsRider]
 
     def get_queryset(self):
-        return Delivery.objects.filter(rider__user=self.request.user).exclude(
+        queryset = Delivery.objects.all() if self.request.user.is_superuser or self.request.user.role == "admin" else Delivery.objects.filter(rider__user=self.request.user)
+        return queryset.exclude(
             order__status__in=["delivered", "cancelled"]
         )
 
@@ -45,6 +46,8 @@ class MyOffersView(generics.ListAPIView):
     permission_classes = [IsRider]
 
     def get_queryset(self):
+        if self.request.user.is_superuser or self.request.user.role == "admin":
+            return DeliveryOffer.objects.filter(status="offered")
         return DeliveryOffer.objects.filter(rider__user=self.request.user, status="offered")
 
 

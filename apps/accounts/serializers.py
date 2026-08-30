@@ -17,13 +17,25 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class LoginSerializer(TokenObtainPairSerializer):
-    username_field = User.EMAIL_FIELD
+    email = serializers.EmailField(write_only=True)
+    role = serializers.ChoiceField(choices=Role.choices, write_only=True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields.pop(User.USERNAME_FIELD, None)
 
     def validate(self, attrs):
-        """Authenticate with the case-insensitive email address used at registration."""
-        login = attrs["email"].strip()
-        user = User.objects.filter(email__iexact=login).first()
-        if not user or not user.check_password(attrs["password"]) or not user.is_active:
+        email = attrs["email"].strip().lower()
+        role = attrs["role"]
+        user = next(
+            (
+                candidate
+                for candidate in User.objects.filter(email__iexact=email, role=role, is_active=True)
+                if candidate.check_password(attrs["password"])
+            ),
+            None,
+        )
+        if not user:
             raise AuthenticationFailed(
                 self.error_messages["no_active_account"],
                 "no_active_account",
@@ -48,27 +60,39 @@ class RegisterSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         email = value.strip().lower()
-        if User.objects.filter(email__iexact=email).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
         return email
 
     def validate_username(self, value):
-        if User.objects.filter(username=value).exists():
-            raise serializers.ValidationError("A user with this username already exists.")
-        return value
-
-    def validate_phone_number(self, value):
-        if User.objects.filter(phone_number=value).exists():
-            raise serializers.ValidationError("A user with this phone number already exists.")
         return value
 
     def validate(self, attrs):
-        pending = PendingRegistration.objects.filter(email=attrs["email"]).first()
+        role = attrs["role"]
+        username = attrs["username"]
+        email = attrs["email"]
+        phone_number = attrs["phone_number"]
+
+        if User.objects.filter(username=username, role=role).exists():
+            raise serializers.ValidationError({"username": "A user with this username already exists for this role."})
+        if User.objects.filter(email__iexact=email, role=role).exists():
+            raise serializers.ValidationError({"email": "An account with this email already exists for this role."})
+        if User.objects.filter(phone_number=phone_number, role=role).exists():
+            raise serializers.ValidationError({"phone_number": "An account with this phone number already exists for this role."})
+
+        pending = PendingRegistration.objects.filter(email__iexact=email, role=role).first()
+        if PendingRegistration.objects.filter(username=username, role=role).exclude(
+            pk=pending.pk if pending else None
+        ).exists():
+            raise serializers.ValidationError({"username": "This username already has a pending registration for this role."})
         if pending and pending.username != attrs["username"]:
-            raise serializers.ValidationError({"username": "This email already has a pending registration."})
+            raise serializers.ValidationError({"username": "This email already has a pending registration for this role."})
+        if PendingRegistration.objects.filter(phone_number=phone_number, role=role).exclude(
+            pk=pending.pk if pending else None
+        ).exists():
+            raise serializers.ValidationError({"phone_number": "This phone number already has a pending registration for this role."})
         return attrs
 
 
 class RegistrationOTPVerifySerializer(serializers.Serializer):
     email = serializers.EmailField()
+    role = serializers.ChoiceField(choices=Role.choices)
     code = serializers.CharField(max_length=6)

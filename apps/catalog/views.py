@@ -1,19 +1,27 @@
-from rest_framework import permissions, viewsets
+from django.db.models import Q
+from rest_framework import generics, permissions, viewsets
 
 from .models import Brand, Category, Medicine
 from .serializers import BrandSerializer, CategorySerializer, MedicineSerializer
 
 
+class IsAdminOrReadOnly(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.method in permissions.SAFE_METHODS or (
+            request.user.is_authenticated and (request.user.is_superuser or request.user.role == "admin")
+        )
+
+
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAdminOrReadOnly]
 
 
 class BrandViewSet(viewsets.ModelViewSet):
     queryset = Brand.objects.all()
     serializer_class = BrandSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAdminOrReadOnly]
 
 
 class MedicineViewSet(viewsets.ModelViewSet):
@@ -23,7 +31,7 @@ class MedicineViewSet(viewsets.ModelViewSet):
 
     queryset = Medicine.objects.filter(is_active=True)
     serializer_class = MedicineSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAdminOrReadOnly]
     filterset_fields = ["category", "brand", "requires_prescription"]
     search_fields = ["name", "generic_name"]
 
@@ -31,6 +39,25 @@ class MedicineViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         q = self.request.query_params.get("q")
         if q:
-            from django.db.models import Q
-            qs = qs.filter(Q(name__icontains=q) | Q(generic_name__icontains=q))
+            qs = qs.filter(
+                Q(name__icontains=q)
+                | Q(generic_name__icontains=q)
+                | Q(category__name__icontains=q)
+            ).distinct()
         return qs
+
+
+
+class MedicineSearchView(generics.ListAPIView):
+    serializer_class = MedicineSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        query = self.request.query_params.get("q", "").strip()
+        if not query:
+            return Medicine.objects.none()
+        return Medicine.objects.filter(is_active=True).filter(
+            Q(name__icontains=query)
+            | Q(generic_name__icontains=query)
+            | Q(category__name__icontains=query)
+        ).distinct()
