@@ -1,4 +1,4 @@
-# Django 5.2.8+ supports Python 3.14 (the project virtualenv uses 3.14).
+﻿# Django 5.2.8+ supports Python 3.14 (the project virtualenv uses 3.14).
 Django>=5.2.8,<5.3
 djangorestframework
 djangorestframework-simplejwt
@@ -11,6 +11,9 @@ django-cors-headers
 celery
 redis
 
+# Google Gemini AI for the Panda assistant
+google-genai
+
 # ── AI Agent dependencies ──────────────────────────────────
 sentence-transformers          # semantic search embeddings
 scikit-learn                   # intent classification
@@ -18,3 +21,4 @@ joblib                         # sklearn model serialisation
 numpy                          # numerical ops for embeddings
 opencv-python-headless         # medicine image feature extraction
 langdetect                     # Roman Urdu vs English detection
+

@@ -21,7 +21,10 @@ urlpatterns = [
     # Interconnection hub: orders + delivery lifecycle
     path("orders/", include("apps.orders.urls")),
     # AI Agent: chat, semantic search, image matching
-    path("ai/", include("apps.ai_agent.urls")),
+    path("ai/agent/", include("apps.ai_agent.urls")),
+    # AI Assistant (Panda AI)
+    path("ai/assistant/", include("apps.ai_assistant.urls")),
+
 ]
 
 if settings.DEBUG:
