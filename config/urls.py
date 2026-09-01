@@ -5,6 +5,8 @@ from django.urls import include, path
 from django.views.generic import TemplateView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from apps.ai_assistant.views import AIChatView
+
 urlpatterns = [
     path("", TemplateView.as_view(template_name="index.html"), name="web-frontend"),
     path("admin/", admin.site.urls),
@@ -22,8 +24,9 @@ urlpatterns = [
     path("orders/", include("apps.orders.urls")),
     # AI Agent: chat, semantic search, image matching
     path("ai/agent/", include("apps.ai_agent.urls")),
-    # AI Assistant (Panda AI)
+    # AI Assistant (Panda AI) -- full API and the chat alias used by the frontend widget
     path("ai/assistant/", include("apps.ai_assistant.urls")),
+    path("ai/chat/", AIChatView.as_view(), name="panda-ai-chat"),
 
 ]
 

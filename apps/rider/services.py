@@ -21,13 +21,25 @@ def request_rider_assignment(order):
     delivery, _ = Delivery.objects.get_or_create(order=order)
 
     candidates = RiderProfile.objects.filter(is_available=True, is_verified=True)
-    scored = sorted(candidates, key=_score_rider, reverse=True)
 
-    for rider in scored[:3]:
-        DeliveryOffer.objects.create(delivery=delivery, rider=rider, score=_score_rider(rider))
+    # Score each rider exactly once so the stored offer score matches the
+    # ranking decision (B14) and dispatch is deterministic for a given ETA.
+    scored = sorted(
+        ((rider, _score_rider(rider)) for rider in candidates),
+        key=lambda pair: pair[1],
+        reverse=True,
+    )
+
+    # Invalidate any previously outstanding offers on this delivery.
+    delivery.offers.filter(status="offered").update(status="expired")
+
+    for rider, score in scored[:3]:
+        DeliveryOffer.objects.create(delivery=delivery, rider=rider, score=round(score, 4))
 
     if scored:
-        best = scored[0]
+        best, best_score = scored[0]
+        # Persist the same score used for the decision onto the top offer.
+        DeliveryOffer.objects.filter(delivery=delivery, rider=best).update(score=round(best_score, 4))
         assign_rider(delivery, best)
     return delivery
 
@@ -37,6 +49,9 @@ def assign_rider(delivery, rider):
     delivery.assigned_at = timezone.now()
     delivery.eta_minutes_min, delivery.eta_minutes_max = predict_eta(delivery)
     delivery.save(update_fields=["rider", "assigned_at", "eta_minutes_min", "eta_minutes_max"])
+    # Once a rider is chosen, expire all other open offers on this delivery
+    # so losing riders don't see stale "offered" requests (B14).
+    delivery.offers.exclude(rider=rider).filter(status="offered").update(status="expired")
     return delivery
 
 

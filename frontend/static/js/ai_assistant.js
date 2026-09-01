@@ -530,6 +530,7 @@ const PandaAI = (() => {
       const tool = action.tool;
       const result = action.result || {};
       if (tool === "search_medicines" && result.medicines) html += renderMedicineCards(result);
+      else if (tool === "symptom_check") html += renderSymptomCard(result);
       else if (tool === "get_cart" && result.items) html += renderCartCard(result);
       else if (tool === "add_to_cart" && result.success) { html += renderSuccessCard(result.message || "Added to cart!"); App.refreshCartBadge(); }
       else if (tool === "remove_from_cart" && result.success) { html += renderSuccessCard(result.message || "Removed."); App.refreshCartBadge(); }
@@ -545,10 +546,42 @@ const PandaAI = (() => {
     return html;
   }
 
+  function renderMedicineCardBody(result) {
+    if (!result.medicines || result.medicines.length === 0) return '<div class="ai-empty">No medicines found.</div>';
+    return result.medicines.map((m) => {
+      const available = m.available && m.stock > 0;
+      const stockLine = available
+        ? '<div class="ai-med-price-line"><span class="ai-price">Rs ' + (m.price || 0).toLocaleString() + '</span><span class="ai-in-stock-badge">In stock \u00b7 ' + (m.stock || 0) + '</span></div>'
+        : '<div class="ai-med-price-line"><span class="ai-out-badge">Not available</span></div>';
+      const addBtn = available
+        ? '<button class="ai-action-btn ai-add-btn" data-medicine-id="' + m.id + '" data-medicine-name="' + UI.esc(m.name) + '">+ Add</button>'
+        : '<span class="ai-out-badge">Out of stock</span>';
+      return '<div class="ai-med-item"><div class="ai-med-info"><div class="ai-med-name">' + UI.esc(m.name) + ' ' + UI.esc(m.strength || "") + '</div><div class="ai-med-sub">' + UI.esc(m.generic_name || "") + (m.form ? ' \u00b7 ' + UI.esc(m.form) : "") + (m.requires_prescription ? ' <span class="ai-rx-badge">Rx</span>' : ' <span class="ai-otc-badge">OTC</span>') + '</div>' + stockLine + (m.description ? '<div class="ai-med-desc">' + UI.esc(m.description.substring(0, 80)) + '</div>' : "") + '</div>' + addBtn + '</div>';
+    }).join("");
+  }
+
   function renderMedicineCards(result) {
     if (!result.medicines || result.medicines.length === 0) return '<div class="ai-action-card ai-empty">No medicines found.</div>';
-    const items = result.medicines.map((m) => '<div class="ai-med-item"><div class="ai-med-info"><div class="ai-med-name">' + UI.esc(m.name) + ' ' + UI.esc(m.strength || "") + '</div><div class="ai-med-sub">' + UI.esc(m.generic_name || "") + (m.form ? ' \u00b7 ' + UI.esc(m.form) : "") + (m.requires_prescription ? ' <span class="ai-rx-badge">Rx</span>' : ' <span class="ai-otc-badge">OTC</span>') + '</div>' + (m.description ? '<div class="ai-med-desc">' + UI.esc(m.description.substring(0, 80)) + '</div>' : "") + '</div><button class="ai-action-btn ai-add-btn" data-medicine-id="' + m.id + '" data-medicine-name="' + UI.esc(m.name) + '">+ Add</button></div>').join("");
-    return '<div class="ai-action-card ai-med-list-card"><div class="ai-card-title">Found ' + result.found + ' medicine(s)</div>' + items + '</div>';
+    const items = renderMedicineCardBody(result);
+    return '<div class="ai-action-card ai-med-list-card"><div class="ai-card-title">Found ' + result.found + ' medicine(s)' + (result.pharmacy ? ' \u2014 ' + UI.esc(result.pharmacy) : "") + '</div>' + items + '</div>';
+  }
+
+  function renderSymptomCard(result) {
+    if (result.needs_clarification) {
+      return '<div class="ai-action-card ai-symptom-card"><div class="ai-card-title">\ud83d\udca1 I need a bit more detail</div><div>' + UI.esc(result.question || result.follow_up_question || "Please describe your symptoms.") + '</div></div>';
+    }
+    let html = '<div class="ai-action-card ai-symptom-card"><div class="ai-card-title">\ud83e\ude7a ' + UI.esc(result.label) + '</div>';
+    html += '<div class="ai-med-desc">' + UI.esc(result.advice) + '</div>';
+    if (result.red_flag || result.doctor_visit) {
+      html += '<div class="ai-risk high"><b>\u26a0\ufe0f See a doctor:</b> ' + UI.esc(result.red_flag || "A doctor visit is recommended for this condition.") + '</div>';
+    }
+    html += result.doctor_visit && !result.red_flag ? '' : '';
+    if (result.follow_up_question) html += '<div class="hint" style="margin-top:6px">' + UI.esc(result.follow_up_question) + '</div>';
+    if (result.medicines && result.medicines.length) {
+      html += '<div class="ai-divider"></div><div class="ai-card-title" style="font-size:12px">Recommended medicines</div>' + renderMedicineCardBody(result);
+    }
+    html += '</div>';
+    return html;
   }
 
   function renderCartCard(result) {
@@ -593,7 +626,14 @@ const PandaAI = (() => {
 
   function renderMedicineDetailCard(result) {
     if (result.error) return '<div class="ai-action-card ai-error">' + UI.esc(result.error) + '</div>';
-    return '<div class="ai-action-card ai-med-detail"><div class="ai-card-title">' + UI.esc(result.name) + ' ' + UI.esc(result.strength || "") + '</div><div class="ai-order-meta">' + (result.generic_name ? '<div><span class="ai-meta-label">Generic:</span> ' + UI.esc(result.generic_name) + '</div>' : "") + (result.brand ? '<div><span class="ai-meta-label">Brand:</span> ' + UI.esc(result.brand) + '</div>' : "") + (result.category ? '<div><span class="ai-meta-label">Category:</span> ' + UI.esc(result.category) + '</div>' : "") + '<div><span class="ai-meta-label">Form:</span> ' + UI.esc(result.form || "N/A") + '</div><div><span class="ai-meta-label">Price:</span> Rs ' + (result.price || 0).toLocaleString() + '</div><div><span class="ai-meta-label">Stock:</span> ' + result.stock + ' available</div><div><span class="ai-meta-label">Pharmacy:</span> ' + UI.esc(result.pharmacy) + '</div></div>' + (result.description ? '<div class="ai-divider"></div><div class="ai-med-desc">' + UI.esc(result.description) + '</div>' : "") + '<div class="ai-card-actions"><button class="ai-action-btn ai-add-btn" data-medicine-id="' + result.id + '" data-medicine-name="' + UI.esc(result.name) + '">+ Add to Cart</button></div></div>';
+    const available = result.available && result.stock > 0;
+    const stockRow = available
+      ? '<div><span class="ai-meta-label">Stock:</span> <span class="ai-in-stock-badge">\u2713 In stock \u00b7 ' + result.stock + ' available</span></div>'
+      : '<div><span class="ai-meta-label">Stock:</span> <span class="ai-out-badge">Not available at this pharmacy</span></div>';
+    const addBtn = available
+      ? '<div class="ai-card-actions"><button class="ai-action-btn ai-add-btn" data-medicine-id="' + result.id + '" data-medicine-name="' + UI.esc(result.name) + '">+ Add to Cart</button></div>'
+      : '<div class="ai-card-actions"><button class="ai-action-btn" disabled>Out of stock</button></div>';
+    return '<div class="ai-action-card ai-med-detail"><div class="ai-card-title">' + UI.esc(result.name) + ' ' + UI.esc(result.strength || "") + '</div><div class="ai-order-meta">' + (result.generic_name ? '<div><span class="ai-meta-label">Generic:</span> ' + UI.esc(result.generic_name) + '</div>' : "") + (result.brand ? '<div><span class="ai-meta-label">Brand:</span> ' + UI.esc(result.brand) + '</div>' : "") + (result.category ? '<div><span class="ai-meta-label">Category:</span> ' + UI.esc(result.category) + '</div>' : "") + '<div><span class="ai-meta-label">Form:</span> ' + UI.esc(result.form || "N/A") + '</div><div><span class="ai-meta-label">Price:</span> Rs ' + (result.price || 0).toLocaleString() + '</div>' + stockRow + '<div><span class="ai-meta-label">Pharmacy:</span> ' + UI.esc(result.pharmacy) + '</div></div>' + (result.description ? '<div class="ai-divider"></div><div class="ai-med-desc">' + UI.esc(result.description) + '</div>' : "") + addBtn + '</div>';
   }
 
   function renderProfileCard(result) {
