@@ -154,6 +154,6 @@ OLLAMA_TIMEOUT = 30                          # seconds before fallback
 
 # ── Google Gemini AI Assistant ──
 # Get a free API key from https://aistudio.google.com/apikey
-GEMINI_API_KEY = os.environ.get("AQ.Ab8RN6I3UUwvXvO70syMFHcf69fQ0oTrUyXCZJYBFK_8BmrpGw", "")  # set via env to avoid committing secrets
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()  # set via environment variable
 GEMINI_MODEL = "gemini-3.6-flash"
 
