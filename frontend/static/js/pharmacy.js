@@ -241,52 +241,90 @@ const Pharmacy = (() => {
   // ---------- Prescription verification ----------
   async function renderRxVerify(container) {
     await UI.withLoading(container, async () => {
-      container.innerHTML = `
-        <div class="page-header"><div><h2>Rx Verification</h2><div class="desc">Approve or reject a customer prescription by its number.</div></div></div>
-        <div class="banner info">The backend does not expose a list of pending prescriptions to pharmacies yet — ask the customer for their Rx number (shown in their Prescriptions screen), then decide below.</div>
-        <div class="grid cols-2">
-          <div class="card">
-            <div class="card-title">Verify prescription</div>
-            <form id="rxv-form">
-              <div class="field"><label>Prescription ID</label><input class="input" type="number" name="rx_id" placeholder="e.g. 3" required /></div>
-              <div class="field"><label>Decision</label>
-                <select class="input" name="decision">
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="needs_info">Needs more info</option>
-                </select>
-              </div>
-              <div class="field"><label>Notes</label><textarea class="input" name="notes" placeholder="Optional notes stored with the review"></textarea></div>
-              <button class="btn" type="submit">Submit Decision</button>
-            </form>
-          </div>
-          <div class="card">
-            <div class="card-title">How it works</div>
-            <ul style="padding-left:18px;font-size:13.5px;color:#334155;line-height:1.9">
-              <li>Customer uploads prescription → status <b>needs_review</b>.</li>
-              <li>You approve → status becomes <b>verified</b>; reject → <b>rejected</b>.</li>
-              <li>A PrescriptionReview record + audit log entry is written by the backend.</li>
-              <li>Note: any pharmacy can currently verify any prescription (known backend gap).</li>
-            </ul>
-          </div>
-        </div>`;
+      const { results } = API.unwrap(await API.get("/pharmacy/prescriptions/incoming/"));
+      const RX_COLORS = { uploaded: "gray", processing: "amber", needs_review: "amber", verified: "green", rejected: "red" };
+      const statusBadge = (s) => `<span class="badge ${RX_COLORS[s] || "gray"}">${UI.esc(s.replace(/_/g, " "))}</span>`;
 
-      document.getElementById("rxv-form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const f = e.target;
-        const btn = f.querySelector('button[type="submit"]');
-        btn.disabled = true;
+      container.innerHTML = `
+        <div class="page-header"><div><h2>Rx Verification</h2><div class="desc">Prescriptions assigned to your pharmacy, newest first. Approve or reject each.</div></div></div>
+        ${results.length === 0 ? UI.emptyState("No prescriptions yet", "When a customer uploads a prescription to your pharmacy it will appear here for review.") :
+          results.map((p) => `
+          <div class="order-card">
+            <div class="oc-head">
+              <span class="oc-id">Rx #${p.id}</span>
+              ${statusBadge(p.status)}
+              <span class="oc-date">${UI.fmtDate(p.created_at)}</span>
+              <span class="hint">Customer: ${UI.esc(p.customer_name || `#${p.customer}`)}</span>
+            </div>
+            <div class="oc-body">
+              <div>
+                ${(p.items || []).length === 0
+                  ? '<span class="hint">No extracted items yet</span>'
+                  : `<table class="table"><tr><th>Raw text</th><th>Matched</th><th>Dosage</th><th>Qty</th><th>Confidence</th></tr>
+                     ${p.items.map((it) => `
+                       <tr>
+                         <td>${UI.esc(it.raw_medicine_text)}</td>
+                         <td>${it.medicine ? UI.esc(it.medicine.name) : '<span class="badge red">unmatched</span>'}</td>
+                         <td>${UI.esc(`${it.dosage || ""}${it.frequency ? " · " + it.frequency : ""}`)}</td>
+                         <td>${it.quantity ?? "—"}</td>
+                         <td>${it.confidence != null ? Math.round(it.confidence * 100) + "%" : "—"}</td>
+                       </tr>`).join("")}
+                   </table>`}
+                ${(p.risk_flags || []).length === 0
+                  ? ""
+                  : `<div class="rx-risks">${p.risk_flags.map((r) => `
+                      <div class="ai-risk ${r.severity}">
+                        <b>${r.severity === "high" ? "⚠️" : "⚡"} ${UI.esc(r.title)}</b>
+                        <div>${UI.esc(r.message)}</div>
+                        ${r.items && r.items.length ? '<div class="risk-items">' + r.items.map((t) => `<span>${UI.esc(t)}</span>`).join("") + "</div>" : ""}
+                      </div>`).join("")}</div>`}
+              </div>
+              <div style="min-width:220px">
+                <div class="hint">Dr. ${UI.esc(p.doctor_name || "—")} · Patient ${UI.esc(p.patient_name || "—")}</div>
+                ${p.file ? `<div style="margin-top:6px"><a href="${UI.mediaUrl(p.file)}" target="_blank" class="mono">View uploaded file</a></div>` : ""}
+              </div>
+            </div>
+            ${["uploaded", "processing", "needs_review"].includes(p.status) ? `
+            <div class="btn-group" style="margin-top:12px">
+              <button class="btn sm" data-rx="${p.id}" data-decision="approved">Approve</button>
+              <button class="btn sm outline-danger" data-rx="${p.id}" data-decision="rejected">Reject</button>
+              <button class="btn sm secondary" data-rx="${p.id}" data-decision="needs_info">Needs info</button>
+            </div>` : ''}
+          </div>`).join("")}`;
+
+      container.querySelectorAll("[data-rx]").forEach((b) => b.onclick = async () => {
+        const id = b.dataset.rx, decision = b.dataset.decision;
+        let notes = "";
+        if (decision !== "approved") {
+          notes = await promptText("Add a short note for this decision (optional):") || "";
+        }
+        b.disabled = true;
         try {
-          const res = await API.post(`/pharmacy/prescriptions/${f.rx_id.value}/verify/`, {
-            decision: f.decision.value,
-            notes: f.notes.value.trim(),
-          });
-          UI.modal(`<h3>Decision recorded</h3>
-            <p>Prescription <b>#${res.prescription_id}</b> is now <b>${UI.esc(res.status)}</b>.</p>
-            <div class="modal-actions"><button class="btn" onclick="this.closest('.modal-backdrop').remove()">Done</button></div>`);
-        } catch (err) { UI.toastErr(err); }
-        btn.disabled = false;
+          const res = await API.post(`/pharmacy/prescriptions/${id}/verify/`, { decision, notes });
+          UI.toast(`Rx #${res.prescription_id} → ${UI.esc(res.status)}`, "success");
+          renderRxVerify(container);
+        } catch (err) { b.disabled = false; UI.toastErr(err); }
       });
+    });
+  }
+
+  function promptText(label) {
+    return new Promise((resolve) => {
+      UI.modal(
+        `<h3>Notes</h3><p style="color:var(--muted);font-size:14px">${UI.esc(label)}</p>
+         <textarea class="input" id="rx-note" rows="2"></textarea>
+         <div class="modal-actions">
+           <button class="btn secondary" data-x="no">Cancel</button>
+           <button class="btn" data-x="yes">Save note</button>
+         </div>`,
+        (backdrop, close) => {
+          backdrop.querySelector('[data-x="no"]').onclick = () => { close(); resolve(""); };
+          backdrop.querySelector('[data-x="yes"]').onclick = () => {
+            const v = (backdrop.querySelector("#rx-note").value || "").trim();
+            close(); resolve(v);
+          };
+        }
+      );
     });
   }
 
@@ -295,9 +333,10 @@ const Pharmacy = (() => {
     await UI.withLoading(container, async () => {
       const { results } = API.unwrap(await API.get("/pharmacy/forecasts/"));
       container.innerHTML = `
-        <div class="page-header"><div><h2>Demand Forecasts</h2><div class="desc">Generated by the AI service's scheduled job (not implemented yet).</div></div></div>
+        <div class="page-header"><div><h2>Demand Forecasts</h2><div class="desc">AI prediction from your real order history (last 30 days, next 7 days).</div></div>
+          <div><button class="btn" id="refresh-forecasts">↻ Refresh forecasts</button></div></div>
         <div class="card">
-          ${results.length === 0 ? UI.emptyState("No forecasts", "This table fills when the AI forecasting job writes DemandForecast rows.") : `
+          ${results.length === 0 ? UI.emptyState("No forecasts", "Click 'Refresh forecasts' to generate predictions from your order history.") : `
           <div class="table-wrap">
             <table class="table">
               <tr><th>Medicine</th><th>Current stock</th><th>Expected demand</th><th>Recommended restock</th><th>Generated</th></tr>
@@ -309,6 +348,14 @@ const Pharmacy = (() => {
             </table>
           </div>`}
         </div>`;
+      document.getElementById("refresh-forecasts")?.addEventListener("click", async (e) => {
+        e.target.disabled = true;
+        try {
+          const res = await API.post("/pharmacy/forecasts/generate/", { lookback_days: 30, horizon_days: 7 });
+          UI.toast(`Forecasts updated for ${res.count} medicines`, "success");
+          renderForecasts(container);
+        } catch (err) { e.target.disabled = false; UI.toastErr(err); }
+      });
     });
   }
 

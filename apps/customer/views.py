@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -78,8 +79,33 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
         if result:
             prescription.ai_raw_response = result
             prescription.ai_model_version = result.get("model_version", "")
+            prescription.doctor_name = result.get("doctor_name", prescription.doctor_name)
+            prescription.patient_name = result.get("patient_name", prescription.patient_name)
+        # Turn the AI payload (if any) into PrescriptionItem rows right away
+        # (B7) so the customer sees extracted items and can build a cart.
+        services.parse_ai_extraction_into_items(prescription)
         prescription.status = "needs_review"
         prescription.save()
+
+    def retrieve(self, request, *args, **kwargs):
+        prescription = self.get_object()
+        services.parse_ai_extraction_into_items(prescription)
+        return Response(self.get_serializer(prescription).data)
+
+    @action(detail=True, methods=["post"], url_path="build-cart")
+    def build_cart(self, request, pk=None):
+        """Convert a prescription's extracted items into the customer's cart."""
+        prescription = self.get_object()
+        try:
+            cart, unmatched = services.build_cart_from_prescription(
+                prescription, _profile(request)
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response({
+            "cart": CartSerializer(cart).data,
+            "unmatched": unmatched,
+        })
 
 
 class CartView(APIView):
@@ -103,10 +129,18 @@ class CartView(APIView):
                 cart.save(update_fields=["pharmacy", "updated_at"])
 
         medicine_id = request.data.get("medicine_id")
-        quantity = int(request.data.get("quantity", 1))
+        try:
+            quantity = int(request.data.get("quantity", 1))
+        except (TypeError, ValueError):
+            return Response({"detail": "quantity must be a valid integer."}, status=400)
+        if quantity < 1:
+            return Response({"detail": "Quantity must be at least 1."}, status=400)
         if medicine_id:
             if not cart.pharmacy_id:
                 return Response({"detail": "Select a pharmacy before adding medicine."}, status=400)
+            from apps.catalog.models import Medicine
+            if not Medicine.objects.filter(id=medicine_id, is_active=True).exists():
+                return Response({"detail": "Medicine not found."}, status=404)
             inventory = get_object_or_404(
                 InventoryItem,
                 pharmacy_id=cart.pharmacy_id,

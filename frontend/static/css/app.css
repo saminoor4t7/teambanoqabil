@@ -537,6 +537,28 @@ pre.code {
   font-size: 9px; font-weight: 700; background: #dcfce7;
   color: #166534; padding: 1px 5px; border-radius: 3px; margin-left: 4px;
 }
+.ai-med-price-line { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+.ai-price { font-size: 12px; font-weight: 700; color: var(--primary-dark); }
+.ai-in-stock-badge {
+  font-size: 9px; font-weight: 800; background: #dcfce7; color: #166534;
+  padding: 1px 5px; border-radius: 3px; letter-spacing: 0.3px;
+}
+.ai-out-badge {
+  font-size: 9px; font-weight: 800; background: #fee2e2; color: #b91c1c;
+  padding: 1px 5px; border-radius: 3px; letter-spacing: 0.3px;
+}
+.rx-risks { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.ai-risk {
+  border: 1px solid #fca5a5; background: #fef2f2; color: #7f1d1d;
+  border-radius: 8px; padding: 8px 10px; font-size: 12px;
+}
+.ai-risk.high { border-color: #f87171; background: #fee2e2; }
+.ai-risk.moderate { border-color: #fbbf24; background: #fffbeb; color: #78350f; }
+.risk-items { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.risk-items span {
+  font-size: 10px; background: rgba(0,0,0,0.06); padding: 1px 6px;
+  border-radius: 10px;
+}
 
 /* Action buttons */
 .ai-action-btn {

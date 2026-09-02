@@ -72,9 +72,9 @@ const Admin = (() => {
         </div>
         <div class="card" style="margin-top:16px">
           <div class="card-title">Demo Data Seeder</div>
-          <p class="hint" style="margin-bottom:10px">One click creates typical Pakistani OTC/Rx medicines (skips ones already present by name). Perfect before a demo run.</p>
+          <p class="hint" style="margin-bottom:10px">One click creates 61 common Pakistani OTC/Rx medicines (skips ones already present by name). Perfect before a demo run.</p>
           <div class="btn-group">
-            <button class="btn" id="seed-basic">Seed basic catalog (categories + brands + 12 medicines)</button>
+            <button class="btn" id="seed-basic">Seed basic catalog (12 categories + 15 brands + 61 medicines)</button>
           </div>
           <p class="hint" style="margin-top:8px">Full data management (including deletion of users/orders) lives in the Django admin at /admin/.</p>
           <div id="seed-out" style="margin-top:12px"></div>
@@ -199,22 +199,103 @@ const Admin = (() => {
     ["Cold & Flu", "Cough, cold and flu remedies"],
     ["Vitamins & Supplements", "Daily nutrition support"],
     ["Stomach Care", "Acidity, digestion and gut health"],
+    ["Allergy", "Antihistamines and allergy treatment"],
+    ["Cardiovascular", "Heart, blood pressure and cholesterol"],
+    ["Dermatology", "Skin creams, ointments and lotions"],
+    ["Diabetes", "Blood sugar management"],
+    ["Mental Health", "Anxiety, depression and sleep"],
+    ["Respiratory", "Asthma and COPD treatment"],
+    ["Eye Care", "Eye drops and ointments"],
   ];
-  const SEED_BRANDS = ["GSK", "Abbott", "Searle", "Getz Pharma", "Hilton Pharma"];
+  const SEED_BRANDS = [
+    "GSK", "Abbott", "Searle", "Getz Pharma", "Hilton Pharma",
+    "Cipla", "Pfizer", "Bayer", "Ferozsons", "Barrett Hodgson",
+    "Sami Pharmaceuticals", "Highnoon Laboratories", "Atco Laboratories",
+    "Brookes Pharma", "Platinum Pharmaceuticals",
+  ];
   const SEED_MEDICINES = [
-    ["Panadol", "paracetamol", "500mg", "tablet", "Pain Relief", "GSK", false, "Relieves pain and fever."],
-    ["Panadol Extra", "paracetamol + caffeine", "500mg", "tablet", "Pain Relief", "GSK", false, "Stronger relief for headaches."],
-    ["Brufen", "ibuprofen", "400mg", "tablet", "Pain Relief", "Abbott", false, "NSAID for pain and inflammation."],
+    // Pain Relief
+    ["Panadol", "paracetamol", "500mg", "tablet", "Pain Relief", "GSK", false, "Relieves pain and fever. Pakistan's most used OTC analgesic."],
+    ["Panadol Extra", "paracetamol + caffeine", "500mg", "tablet", "Pain Relief", "GSK", false, "Stronger relief for headaches with caffeine boost."],
+    ["Brufen", "ibuprofen", "400mg", "tablet", "Pain Relief", "Abbott", false, "NSAID for pain, fever and inflammation."],
     ["Disprin", "aspirin", "300mg", "tablet", "Pain Relief", "GSK", false, "Pain, fever and blood thinning."],
-    ["Augmentin", "amoxicillin + clavulanic acid", "625mg", "tablet", "Antibiotics", "GSK", true, "Broad spectrum antibiotic."],
-    ["Flagyl", "metronidazole", "400mg", "tablet", "Antibiotics", "Searle", true, "Anaerobic bacterial infections."],
-    ["Ciproxin", "ciprofloxacin", "500mg", "tablet", "Antibiotics", "Getz Pharma", true, "Fluoroquinolone antibiotic."],
-    ["Calpol", "paracetamol", "120mg/5ml", "syrup", "Cold & Flu", "GSK", false, "Fever relief for children."],
-    ["Rigix", "cetirizine", "10mg", "tablet", "Cold & Flu", "Getz Pharma", false, "Allergy relief antihistamine."],
-    ["Ventolin Inhaler", "salbutamol", "100mcg", "inhaler", "Cold & Flu", "GSK", true, "Asthma reliever inhaler."],
+    ["Combiflam", "ibuprofen + paracetamol", "400mg+325mg", "tablet", "Pain Relief", "Searle", false, "Combined NSAID + analgesic for moderate pain."],
+    ["Ponstan", "mefenamic acid", "500mg", "capsule", "Pain Relief", "Abbott", true, "Potent NSAID for menstrual and muscular pain."],
+    ["Cataflam", "diclofenac potassium", "50mg", "tablet", "Pain Relief", "Novartis", true, "Fast-acting NSAID for acute pain."],
+    ["Volini Gel", "diclofenac diethylamine", "1%", "cream", "Pain Relief", "Cipla", false, "Topical pain relief gel for sprains and strains."],
+
+    // Antibiotics
+    ["Augmentin", "amoxicillin + clavulanic acid", "625mg", "tablet", "Antibiotics", "GSK", true, "Broad-spectrum antibiotic for bacterial infections."],
+    ["Flagyl", "metronidazole", "400mg", "tablet", "Antibiotics", "Searle", true, "Treats anaerobic bacterial and protozoal infections."],
+    ["Ciproxin", "ciprofloxacin", "500mg", "tablet", "Antibiotics", "Bayer", true, "Fluoroquinolone for urinary tract and respiratory infections."],
+    ["Azax", "azithromycin", "500mg", "tablet", "Antibiotics", "Platinum Pharmaceuticals", true, "Macrolide antibiotic for chest and throat infections."],
+    ["Amoxil", "amoxicillin", "500mg", "capsule", "Antibiotics", "GSK", true, "First-line penicillin antibiotic."],
+    ["Cefspan", "cefixime", "200mg", "capsule", "Antibiotics", "Searle", true, "Third-generation cephalosporin for resistant infections."],
+    ["Cepodox", "cefpodoxime proxetil", "200mg", "tablet", "Antibiotics", "Cipla", true, "Oral cephalosporin for ENT and UTI infections."],
+    ["Avelox", "moxifloxacin", "400mg", "tablet", "Antibiotics", "Bayer", true, "Respiratory fluoroquinolone for severe infections."],
+
+    // Cold & Flu
+    ["Calpol", "paracetamol", "120mg/5ml", "syrup", "Cold & Flu", "GSK", false, "Fever relief syrup for children."],
+    ["Rigix", "cetirizine", "10mg", "tablet", "Cold & Flu", "Getz Pharma", false, "Non-drowsy antihistamine for allergy and sneezing."],
+    ["Ventolin Inhaler", "salbutamol", "100mcg", "inhaler", "Cold & Flu", "GSK", true, "Reliever inhaler for asthma and wheezing."],
+    ["Lora", "loratadine", "10mg", "tablet", "Cold & Flu", "Sami Pharmaceuticals", false, "Once-daily non-sedating antihistamine."],
+    ["Montair", "montelukast", "10mg", "tablet", "Cold & Flu", "Cipla", true, "Leukotriene inhibitor for allergic rhinitis and asthma."],
+    ["Allegra", "fexofenadine", "120mg", "tablet", "Cold & Flu", "Sanofi", false, "Non-drowsy 24-hour allergy relief."],
+    ["Decoflam", "phenylephrine + chlorpheniramine", "", "syrup", "Cold & Flu", "Hilton Pharma", false, "Decongestant + antihistamine syrup for cold."],
+    ["Benadryl", "diphenhydramine", "25mg", "tablet", "Cold & Flu", "Pfizer", false, "Antihistamine for cold, allergy and cough."],
+
+    // Stomach Care
+    ["Risek", "omeprazole", "20mg", "capsule", "Stomach Care", "Getz Pharma", true, "Proton pump inhibitor for acidity and reflux."],
+    ["Motilium", "domperidone", "10mg", "tablet", "Stomach Care", "Abbott", false, "Prokinetic for nausea, vomiting and bloating."],
+    ["Pantop", "pantoprazole", "40mg", "tablet", "Stomach Care", "Abbott", true, "PPI for gastric ulcers and GERD."],
+    ["Nexium", "esomeprazole", "40mg", "capsule", "Stomach Care", "AstraZeneca", true, "Potent acid reducer for severe reflux."],
+    ["Buscopan", "hyoscine butylbromide", "10mg", "tablet", "Stomach Care", "Boehringer Ingelheim", true, "Antispasmodic for stomach cramps and colic."],
+    ["Gaviscon", "sodium alginate + sodium bicarbonate", "100ml", "suspension", "Stomach Care", "Reckitt Benckiser", false, "Alginate raft for heartburn and acid reflux."],
+    ["Smecta", "diosmectite", "3g", "sachet", "Stomach Care", "Abbott", false, "Natural clay for acute diarrhoea."],
+    ["Imodium", "loperamide", "2mg", "capsule", "Stomach Care", "Johnson & Johnson", false, "Anti-diarrhoeal for traveller's diarrhoea."],
+
+    // Vitamins & Supplements
     ["Surbex-Z", "vitamin B-complex + zinc", "", "tablet", "Vitamins & Supplements", "Abbott", false, "Immunity and energy support."],
-    ["Risek", "omeprazole", "20mg", "capsule", "Stomach Care", "Getz Pharma", true, "Acidity and reflux control."],
-    ["Motilium", "domperidone", "10mg", "tablet", "Stomach Care", "Abbott", false, "Nausea and vomiting relief."],
+    ["Becosules", "vitamin B-complex + vitamin C", "", "capsule", "Vitamins & Supplements", "Pfizer", false, "B-vitamin supplement for fatigue and mouth ulcers."],
+    ["Centrum", "multivitamin + minerals", "", "tablet", "Vitamins & Supplements", "Pfizer", false, "Complete daily multivitamin."],
+    ["Calcium Sandoz", "calcium + vitamin D3", "500mg", "tablet", "Vitamins & Supplements", "Novartis", false, "Calcium supplement for bone health."],
+    ["Stresstabs", "multivitamin + iron", "", "tablet", "Vitamins & Supplements", "Hilton Pharma", false, "High-potency multivitamin for stress and tiredness."],
+    ["Neurobion", "vitamin B1+B6+B12", "", "tablet", "Vitamins & Supplements", "Merck", true, "Nerve health vitamin B complex."],
+
+    // Cardiovascular
+    ["Amlodac", "amlodipine", "5mg", "tablet", "Cardiovascular", "Cipla", true, "Calcium channel blocker for hypertension."],
+    ["Aten", "atenolol", "50mg", "tablet", "Cardiovascular", "Abbott", true, "Beta-blocker for high blood pressure."],
+    ["Ecosprin", "aspirin", "75mg", "tablet", "Cardiovascular", "USV", true, "Low-dose aspirin for heart attack prevention."],
+    ["Clopilet", "clopidogrel", "75mg", "tablet", "Cardiovascular", "Cipla", true, "Antiplatelet to prevent blood clots."],
+    ["Atorva", "atorvastatin", "10mg", "tablet", "Cardiovascular", "Cipla", true, "Statin for cholesterol management."],
+    ["Concival", "telmisartan + amlodipine", "40mg+5mg", "tablet", "Cardiovascular", "Getz Pharma", true, "Combination ARB + CCB for resistant hypertension."],
+
+    // Dermatology
+    ["Betnovate", "betamethasone valerate", "0.1%", "cream", "Dermatology", "GSK", true, "Topical corticosteroid for eczema and dermatitis."],
+    ["Candiderma", "clotrimazole + neomycin", "", "cream", "Dermatology", "Glenmark", false, "Antifungal + antibiotic cream for skin infections."],
+    ["Skinoren", "azelaic acid", "20%", "cream", "Dermatology", "Bayer", true, "Treatment for acne and rosacea."],
+    ["Elocon", "mometasone furoate", "0.1%", "cream", "Dermatology", "Abbott", true, "Potent topical steroid for inflammatory skin conditions."],
+    ["Deripil", "clobetasol propionate", "0.05%", "cream", "Dermatology", "Atco Laboratories", true, "Very potent steroid for severe psoriasis and dermatitis."],
+
+    // Diabetes
+    ["Glucophage", "metformin", "500mg", "tablet", "Diabetes", "Merck", true, "First-line oral diabetes medicine."],
+    ["Diabetone", "gliclazide", "80mg", "tablet", "Diabetes", "Getz Pharma", true, "Sulfonylurea for type 2 diabetes."],
+    ["Januvia", "sitagliptin", "100mg", "tablet", "Diabetes", "MSD", true, "DPP-4 inhibitor for blood sugar control."],
+
+    // Mental Health
+    ["Lexapro", "escitalopram", "10mg", "tablet", "Mental Health", "Cipla", true, "SSRI antidepressant for depression and anxiety."],
+    ["Zepam", "diazepam", "5mg", "tablet", "Mental Health", "Abbott", true, "Benzodiazepine for anxiety and muscle spasm."],
+    ["Stilnox", "zolpidem", "10mg", "tablet", "Mental Health", "Sanofi", true, "Short-acting sleeping pill for insomnia."],
+
+    // Respiratory
+    ["Montair LC", "montelukast + levocetirizine", "10mg+5mg", "tablet", "Respiratory", "Cipla", true, "Combination for allergic asthma and rhinitis."],
+    ["Becotide", "beclomethasone", "200mcg", "inhaler", "Respiratory", "GSK", true, "Inhaled steroid for asthma maintenance."],
+    ["Deriphyllin", "theophylline", "150mg", "tablet", "Respiratory", "Abbott", true, "Bronchodilator for chronic asthma and COPD."],
+
+    // Eye Care
+    ["Optive", "carboxymethylcellulose", "0.5%", "drops", "Eye Care", "Allergan", false, "Lubricant eye drops for dry eyes."],
+    ["Tobradex", "tobramycin + dexamethasone", "", "drops", "Eye Care", "Alcon", true, "Antibiotic + steroid eye drops for post-surgical inflammation."],
+    ["Genticyn", "gentamicin", "0.3%", "drops", "Eye Care", "Cipla", true, "Antibiotic eye drops for bacterial conjunctivitis."],
   ];
 
   async function seedBasic(container) {

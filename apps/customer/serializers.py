@@ -45,9 +45,15 @@ class PrescriptionSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     source_display = serializers.CharField(source="get_source_display", read_only=True)
     reviewed_by_name = serializers.SerializerMethodField()
+    risk_flags = serializers.SerializerMethodField()
 
     def get_reviewed_by_name(self, obj):
         return obj.reviewed_by.get_username() if obj.reviewed_by else None
+
+    def get_risk_flags(self, obj):
+        """AI copilot safety checks (duplicate ingredients, drug interactions)."""
+        from .medicine_checks import compute_prescription_risks
+        return compute_prescription_risks(obj)
 
     class Meta:
         model = Prescription
@@ -55,7 +61,7 @@ class PrescriptionSerializer(serializers.ModelSerializer):
             "id", "customer", "customer_name", "pharmacy", "pharmacy_id", "pharmacy_name", "file", "source", "source_display",
             "status", "status_display", "doctor_name", "patient_name", "ai_raw_response",
             "ai_model_version", "reviewed_by", "reviewed_by_name", "reviewed_at",
-            "rejection_reason", "created_at", "items",
+            "rejection_reason", "created_at", "items", "risk_flags",
         ]
         read_only_fields = [
             "customer", "status", "ai_raw_response", "ai_model_version",

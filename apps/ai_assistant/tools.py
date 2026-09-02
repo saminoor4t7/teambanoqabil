@@ -30,33 +30,58 @@ def _pharmacy(customer: CustomerProfile):
 
 
 # -- search_medicines --
+def _decorate_medicine_result(m, inv, pharmacy_name):
+    """Shared shape for medicine cards: catalog fields + price/stock at the
+    user's pharmacy so the AI can quote availability without a second call."""
+    stock = int(inv.quantity_in_stock or 0) if inv else 0
+    return {
+        "id": m.id,
+        "name": m.name,
+        "generic_name": m.generic_name,
+        "strength": m.strength,
+        "form": m.form,
+        "brand": m.brand.name if m.brand else "",
+        "requires_prescription": m.requires_prescription,
+        "description": m.description[:120] if m.description else "",
+        "price": float(inv.selling_price) if inv else 0,
+        "stock": stock,
+        "available": bool(inv) and stock > 0,
+        "pharmacy": pharmacy_name if inv else "",
+    }
+
+
 def search_medicines(customer, args):
-    """Search medicines by name, generic name, or category name."""
-    query = args.get("query", "").strip()
-    category = args.get("category", "").strip()
+    """Search medicines by name, generic name, or category name.
+    Enriches each result with price and stock availability at the customer's pharmacy."""
+    query = (args.get("query") or "").strip()
+    category = (args.get("category") or "").strip()
     qs = Medicine.objects.filter(is_active=True)
     if query:
         qs = qs.filter(Q(name__icontains=query) | Q(generic_name__icontains=query))
     if category:
         qs = qs.filter(category__name__icontains=category)
-    results = qs[:15]
-    medicines = []
-    for m in results:
-        medicines.append({
-            "id": m.id,
-            "name": m.name,
-            "generic_name": m.generic_name,
-            "strength": m.strength,
-            "form": m.form,
-            "requires_prescription": m.requires_prescription,
-            "description": m.description[:120] if m.description else "",
-        })
-    return {"found": len(medicines), "medicines": medicines}
+    results = list(qs[:15])
+    ph = _pharmacy(customer)
+    pharmacy_name = ph.business_name if ph else "No pharmacy selected"
+    inv_map = {}
+    if ph and results:
+        inv_map = {
+            inv.medicine_id: inv
+            for inv in InventoryItem.objects.filter(
+                pharmacy=ph, medicine_id__in=[m.id for m in results]
+            )
+        }
+    medicines = [_decorate_medicine_result(m, inv_map.get(m.id), pharmacy_name) for m in results]
+    return {
+        "found": len(medicines),
+        "medicines": medicines,
+        "pharmacy": pharmacy_name,
+    }
 
 
 # -- get_medicine_details --
 def get_medicine_details(customer, args):
-    """Get full details about a specific medicine by ID."""
+    """Get full details about a specific medicine by ID, including price and stock at the customer's pharmacy."""
     med_id = args.get("medicine_id")
     try:
         m = Medicine.objects.get(id=med_id, is_active=True)
@@ -69,7 +94,7 @@ def get_medicine_details(customer, args):
         inv = InventoryItem.objects.filter(pharmacy=ph, medicine=m).first()
         if inv:
             price = float(inv.selling_price)
-            stock = inv.quantity_in_stock
+            stock = int(inv.quantity_in_stock or 0)
     return {
         "id": m.id,
         "name": m.name,
@@ -82,32 +107,78 @@ def get_medicine_details(customer, args):
         "description": m.description,
         "price": price,
         "stock": stock,
+        "available": price > 0 and stock > 0,
         "pharmacy": ph.business_name if ph else "No pharmacy selected",
     }
 
 
 # -- add_to_cart --
 def add_to_cart(customer, args):
-    """Add a medicine to the customer's cart."""
+    """Add a medicine to the customer's cart. Only sells at the customer's pharmacy and respects stock."""
+    try:
+        quantity = max(1, int(args.get("quantity", 1)))
+    except (TypeError, ValueError):
+        quantity = 1
     medicine_id = args.get("medicine_id")
-    quantity = int(args.get("quantity", 1))
     try:
         medicine = Medicine.objects.get(id=medicine_id, is_active=True)
-    except Medicine.DoesNotExist:
+    except (Medicine.DoesNotExist, TypeError, ValueError):
         return {"error": f"Medicine #{medicine_id} not found."}
+
     cart = _cart_for(customer)
     ph = _pharmacy(customer)
-    if ph and not cart.pharmacy_id:
+    if not ph:
+        return {"error": "No pharmacy is available right now. Please try again later."}
+    if cart.pharmacy_id != ph.id:
         cart.pharmacy = ph
         cart.save(update_fields=["pharmacy"])
-    item, created = cart.items.get_or_create(medicine=medicine)
-    item.quantity = quantity
-    item.save()
+
+    inventory = InventoryItem.objects.filter(pharmacy=ph, medicine=medicine).first()
+    if not inventory:
+        return {
+            "error": f"{medicine.name} is not stocked at {ph.business_name}. "
+            "I can search for an alternative that is available.",
+        }
+    stock = int(inventory.quantity_in_stock or 0)
+    if stock <= 0:
+        return {
+            "error": f"{medicine.name} is currently out of stock at {ph.business_name}. "
+            "I can suggest an available alternative.",
+        }
+
+    existing = cart.items.filter(medicine=medicine).first()
+    current = existing.quantity if existing else 0
+    desired = current + quantity
+    qty = min(desired, stock)
+
+    if qty <= 0:
+        return {"error": f"{medicine.name} is not available right now."}
+
+    if existing is None:
+        cart.items.create(medicine=medicine, quantity=qty)
+    else:
+        existing.quantity = qty
+        existing.save(update_fields=["quantity"])
+
+    message = f"{medicine.name} (qty {qty}) added to your cart from {ph.business_name}."
+    if qty < desired:
+        message += f" Only {stock} in stock, so I added {qty}."
+    if medicine.requires_prescription:
+        message += " ⚠️ This medicine requires a prescription — you'll need to provide it at checkout."
+
     return {
         "success": True,
-        "message": f"{medicine.name} (qty {quantity}) added to cart.",
-        "medicine": {"id": medicine.id, "name": medicine.name, "strength": medicine.strength},
-        "quantity": quantity,
+        "message": message,
+        "medicine": {
+            "id": medicine.id,
+            "name": medicine.name,
+            "strength": medicine.strength,
+            "requires_prescription": medicine.requires_prescription,
+        },
+        "quantity": qty,
+        "unit_price": float(inventory.selling_price),
+        "available_stock": stock,
+        "pharmacy": ph.business_name,
     }
 
 
@@ -334,9 +405,16 @@ def get_user_profile(customer, args):
     }
 
 
+# -- symptom_check (delegates to the local triage knowledge base) --
+def _symptom_check(customer, args):
+    from .symptom_check import symptom_check as _run
+    return _run(customer, args)
+
+
 # -- Tool registry --
 TOOL_FUNCTIONS = {
     "search_medicines": search_medicines,
+    "symptom_check": _symptom_check,
     "get_medicine_details": get_medicine_details,
     "add_to_cart": add_to_cart,
     "get_cart": get_cart,

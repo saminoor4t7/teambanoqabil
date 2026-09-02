@@ -96,5 +96,8 @@ class DeliveryTransitionView(APIView):
         delivery = get_object_or_404(Delivery, order_id=order_id, rider__user=request.user)
         if action not in self.ACTIONS:
             return Response({"detail": "Unknown action."}, status=400)
-        delivery = self.ACTIONS[action](delivery, request.user)
+        try:
+            delivery = self.ACTIONS[action](delivery, request.user)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
         return Response(DeliverySerializer(delivery).data)

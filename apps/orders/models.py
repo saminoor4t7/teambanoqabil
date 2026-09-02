@@ -63,7 +63,39 @@ class Order(models.Model):
         self.total = self.subtotal + self.delivery_fee - self.discount
         self.save(update_fields=["subtotal", "total"])
 
+    VALID_TRANSITIONS = {
+        OrderStatus.PENDING: [OrderStatus.UNDER_REVIEW, OrderStatus.ACCEPTED, OrderStatus.CANCELLED],
+        OrderStatus.UNDER_REVIEW: [OrderStatus.ACCEPTED, OrderStatus.CANCELLED],
+        OrderStatus.ACCEPTED: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
+        OrderStatus.PREPARING: [OrderStatus.READY_FOR_PICKUP],
+        OrderStatus.READY_FOR_PICKUP: [OrderStatus.PICKED_UP],
+        OrderStatus.PICKED_UP: [OrderStatus.ON_THE_WAY],
+        OrderStatus.ON_THE_WAY: [OrderStatus.DELIVERED],
+        # terminal states — no further transitions allowed
+        OrderStatus.DELIVERED: [],
+        OrderStatus.CANCELLED: [],
+    }
+
     def set_status(self, new_status, changed_by=None, note=""):
+        """Validate order lifecycle transitions before applying (B8/B9).
+
+        Rejecting a delivered/terminal order is impossible, and duplicate
+        transitions are blocked, so the audit trail stays accurate.
+        """
+        if new_status not in (OrderStatus.values):
+            raise ValueError(f"Unknown order status: {new_status}")
+        allowed = self.VALID_TRANSITIONS.get(self.status, [])
+        if new_status not in allowed:
+            raise ValueError(
+                f"Invalid transition: {self.status} -> {new_status}. "
+                f"Allowed next states: {allowed or 'none (terminal state)'}."
+            )
+        self.status = new_status
+        self.save(update_fields=["status", "updated_at"])
+        OrderStatusHistory.objects.create(order=self, status=new_status, changed_by=changed_by, note=note)
+
+    def set_status_even_terminal(self, new_status, changed_by=None, note=""):
+        """Any transition regardless of current status (internal/admin use)."""
         self.status = new_status
         self.save(update_fields=["status", "updated_at"])
         OrderStatusHistory.objects.create(order=self, status=new_status, changed_by=changed_by, note=note)
