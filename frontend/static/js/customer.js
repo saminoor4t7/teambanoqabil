@@ -96,7 +96,7 @@ const Customer = (() => {
     localStorage.setItem("mp_cart_pharmacy", JSON.stringify(ph));
     container.innerHTML = `
       <div class="page-header">
-        <div><h2>Medicine Store</h2><div class="desc">Browse the verified catalog and add medicines to your cart.</div></div>
+        <div><h2>Medicine Store</h2><div class="desc">Browse medicines available from your selected pharmacy.</div></div>
         <button class="btn secondary sm" id="switch-ph">Change Pharmacy</button>
       </div>
       <div id="shop-ph-bar"></div>

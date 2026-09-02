@@ -37,6 +37,16 @@ class MedicineViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        pharmacy_id = self.request.query_params.get("pharmacy_id")
+        if pharmacy_id:
+            # The customer storefront is scoped to the selected pharmacy.
+            # A medicine belongs in that storefront only after the pharmacy
+            # has added it to its inventory.
+            qs = qs.filter(
+                inventory_items__pharmacy_id=pharmacy_id,
+                inventory_items__pharmacy__is_verified=True,
+                inventory_items__pharmacy__is_open=True,
+            ).distinct()
         q = self.request.query_params.get("q")
         if q:
             qs = qs.filter(

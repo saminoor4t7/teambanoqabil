@@ -5,6 +5,9 @@ from django.db import models
 class RiderProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="rider_profile")
     vehicle_type = models.CharField(max_length=30, blank=True)
+    vehicle_number = models.CharField(max_length=30, blank=True)
+    address_line = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
     cnic_number = models.CharField(max_length=20, unique=True, null=True, blank=True)
     is_verified = models.BooleanField(default=False)
     is_available = models.BooleanField(default=True)  # toggled online/offline by the rider

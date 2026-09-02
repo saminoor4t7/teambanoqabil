@@ -2,6 +2,11 @@ const Rider = (() => {
   let offerTimer = null;
   const stopPoll = () => { if (offerTimer) { clearTimeout(offerTimer); offerTimer = null; } };
 
+  function directionsUrl(fromLat, fromLng, toLat, toLng) {
+    if ([fromLat, fromLng, toLat, toLng].some((value) => value === null || value === undefined || value === "")) return "";
+    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${fromLat},${fromLng}`)}&destination=${encodeURIComponent(`${toLat},${toLng}`)}&travelmode=driving`;
+  }
+
   async function renderDashboard(container) {
     await UI.withLoading(container, async () => {
       const [r, offers, deliveries] = await Promise.all([
@@ -13,6 +18,9 @@ const Rider = (() => {
       container.innerHTML = `
         <div class="page-header"><div><h2>Rider Dashboard</h2><div class="desc">${UI.esc(Session.user.username)} · ${UI.esc(r.vehicle_type || "no vehicle set")}</div></div></div>
         ${r.is_verified ? "" : `<div class="banner warn"><b>Account not verified.</b> Dispatch may not include you until an admin sets "is_verified" in Django admin.</div>`}
+        ${r.vehicle_type && r.vehicle_number && r.address_line && r.city && r.current_latitude != null && r.current_longitude != null
+          ? ""
+          : `<div class="banner warn"><b>Complete your rider profile and send your GPS location.</b> Vehicle, address, city, and current location are required before nearby delivery offers can be sent to you.</div>`}
         <div class="grid cols-3">
           <div class="card stat"><span class="value">${offers.results.length}</span><span class="label">Pending offers</span></div>
           <div class="card stat"><span class="value">${deliveries.results.length}</span><span class="label">Active deliveries</span></div>
@@ -34,7 +42,10 @@ const Rider = (() => {
                     <option value="false" ${!r.is_available ? "selected" : ""}>Offline</option>
                   </select>
                 </div>
+                <div class="field"><label>Vehicle number</label><input class="input" name="vehicle_number" value="${UI.esc(r.vehicle_number || "")}" placeholder="ABC-123" required /></div>
               </div>
+              <div class="field"><label>Current address</label><input class="input" name="address_line" value="${UI.esc(r.address_line || "")}" placeholder="House / street / area" required /></div>
+              <div class="field"><label>City</label><input class="input" name="city" value="${UI.esc(r.city || "")}" placeholder="Lahore" required /></div>
               <div class="field"><label>CNIC number</label><input class="input" name="cnic_number" value="${UI.esc(r.cnic_number || "")}" placeholder="35202-XXXXXXX-X" /></div>
               <button class="btn" type="submit">Save</button>
             </form>
@@ -60,6 +71,9 @@ const Rider = (() => {
         try {
           await API.patch("/rider/me/", {
             vehicle_type: f.vehicle_type.value,
+            vehicle_number: f.vehicle_number.value.trim(),
+            address_line: f.address_line.value.trim(),
+            city: f.city.value.trim(),
             is_available: f.is_available.value === "true",
             cnic_number: f.cnic_number.value.trim() || null,
           });
@@ -82,8 +96,14 @@ const Rider = (() => {
       document.getElementById("loc-form").addEventListener("submit", async (e) => {
         e.preventDefault();
         const f = e.target;
+        const latitude = Number(f.latitude.value);
+        const longitude = Number(f.longitude.value);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+          UI.toast("Enter a valid latitude (-90 to 90) and longitude (-180 to 180)", "error");
+          return;
+        }
         try {
-          await API.post("/rider/location/", { latitude: f.latitude.value, longitude: f.longitude.value });
+          await API.post("/rider/location/", { latitude: latitude.toFixed(6), longitude: longitude.toFixed(6) });
           UI.toast("Location ping sent", "success");
         } catch (err) { UI.toastErr(err); }
       });
@@ -94,8 +114,14 @@ const Rider = (() => {
   async function renderOffers(container) {
     await UI.withLoading(container, async () => {
       let offers = [];
+      let rider = null;
       try {
-        offers = API.unwrap(await API.get("/rider/offers/")).results;
+        const [offersData, riderData] = await Promise.all([
+          API.unwrap(API.get("/rider/offers/")),
+          API.get("/rider/me/"),
+        ]);
+        offers = offersData.results;
+        rider = riderData;
       } catch (err) {
         container.innerHTML = `<div class="banner error">${UI.errText(err)}</div>`;
         return;
@@ -116,6 +142,7 @@ const Rider = (() => {
                 <span>Delivery assignment #${o.delivery} — accept to see full order details under My Deliveries.</span>
               </div>
               <div class="btn-group" style="margin-top:12px">
+                ${directionsUrl(rider.current_latitude, rider.current_longitude, o.pharmacy_latitude, o.pharmacy_longitude) ? `<a class="btn sm secondary" target="_blank" rel="noopener" href="${directionsUrl(rider.current_latitude, rider.current_longitude, o.pharmacy_latitude, o.pharmacy_longitude)}">Map to pickup</a>` : ""}
                 <button class="btn sm" data-decide="accepted" data-offer="${o.id}">Accept Delivery</button>
                 <button class="btn sm outline-danger" data-decide="declined" data-offer="${o.id}">Decline</button>
               </div>
@@ -141,7 +168,10 @@ const Rider = (() => {
   async function renderDeliveries(container) {
     stopPoll();
     await UI.withLoading(container, async () => {
-      const { results } = API.unwrap(await API.get("/rider/deliveries/"));
+      const [{ results }, rider] = await Promise.all([
+        API.unwrap(API.get("/rider/deliveries/")),
+        API.get("/rider/me/"),
+      ]);
       let ordersById = {};
       try {
         const orders = API.unwrap(await API.get("/orders/")).results;
@@ -154,6 +184,11 @@ const Rider = (() => {
           results.map((d) => {
             const order = ordersById[d.order] || {};
             const status = order.status;
+            const destination = d.picked_up_at ? order.delivery_address : order.pharmacy;
+            const mapUrl = directionsUrl(
+              rider.current_latitude, rider.current_longitude,
+              destination?.latitude, destination?.longitude,
+            );
             return `
             <div class="order-card">
               <div class="oc-head">
@@ -172,6 +207,7 @@ const Rider = (() => {
                 </div>
               </div>
               <div class="btn-group" style="margin-top:12px">
+                ${mapUrl ? `<a class="btn sm secondary" target="_blank" rel="noopener" href="${mapUrl}">${d.picked_up_at ? "Map to customer" : "Map to pharmacy"}</a>` : '<span class="hint">Add GPS coordinates to the destination to use the map.</span>'}
                 ${!d.picked_up_at
                   ? `<button class="btn sm" data-act="confirm-pickup" data-order="${d.order}">Confirm Pickup</button>`
                   : `${!d.delivered_at ? `<button class="btn sm secondary" data-act="start" data-order="${d.order}">Start Delivery</button>

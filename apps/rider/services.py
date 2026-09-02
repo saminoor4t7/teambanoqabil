@@ -1,4 +1,4 @@
-import random
+from math import asin, cos, radians, sin, sqrt
 
 from django.utils import timezone
 
@@ -7,12 +7,26 @@ from apps.orders.models import Delivery, OrderStatus
 from .models import DeliveryOffer, RiderProfile
 
 
-def _score_rider(rider):
+def _distance_km(latitude_one, longitude_one, latitude_two, longitude_two):
+    """Great-circle distance between two GPS points in kilometres."""
+    earth_radius_km = 6371
+    latitude_delta = radians(float(latitude_two) - float(latitude_one))
+    longitude_delta = radians(float(longitude_two) - float(longitude_one))
+    value = (
+        sin(latitude_delta / 2) ** 2
+        + cos(radians(float(latitude_one)))
+        * cos(radians(float(latitude_two)))
+        * sin(longitude_delta / 2) ** 2
+    )
+    return earth_radius_km * 2 * asin(sqrt(value))
+
+
+def _score_rider(rider, distance_km):
     """Stand-in for H. Dispatch/ETA Intelligence (distance, traffic, rider
     location, current orders, rider capacity, time of day). Swap this for
     a call to the AI service's scoring endpoint when it's available."""
     load_penalty = rider.active_delivery_count * 5
-    return random.uniform(0, 10) - load_penalty
+    return -(distance_km + load_penalty)
 
 
 def request_rider_assignment(order):
@@ -20,27 +34,40 @@ def request_rider_assignment(order):
     assigns the best-scoring one, mirroring 'AI -> Rider B' in the deck."""
     delivery, _ = Delivery.objects.get_or_create(order=order)
 
-    candidates = RiderProfile.objects.filter(is_available=True, is_verified=True)
+    pharmacy = order.pharmacy
+    candidates = RiderProfile.objects.filter(
+        is_available=True,
+        is_verified=True,
+        vehicle_type__gt="",
+        vehicle_number__gt="",
+        address_line__gt="",
+        city__gt="",
+        current_latitude__isnull=False,
+        current_longitude__isnull=False,
+    )
 
     # Score each rider exactly once so the stored offer score matches the
     # ranking decision (B14) and dispatch is deterministic for a given ETA.
-    scored = sorted(
-        ((rider, _score_rider(rider)) for rider in candidates),
-        key=lambda pair: pair[1],
-        reverse=True,
-    )
+    scored = []
+    if pharmacy.latitude is not None and pharmacy.longitude is not None:
+        for rider in candidates:
+            distance_km = _distance_km(
+                rider.current_latitude, rider.current_longitude,
+                pharmacy.latitude, pharmacy.longitude,
+            )
+            scored.append((rider, distance_km, _score_rider(rider, distance_km)))
+    scored.sort(key=lambda item: item[1])
 
     # Invalidate any previously outstanding offers on this delivery.
     delivery.offers.filter(status="offered").update(status="expired")
 
-    for rider, score in scored[:3]:
-        DeliveryOffer.objects.create(delivery=delivery, rider=rider, score=round(score, 4))
-
-    if scored:
-        best, best_score = scored[0]
-        # Persist the same score used for the decision onto the top offer.
-        DeliveryOffer.objects.filter(delivery=delivery, rider=best).update(score=round(best_score, 4))
-        assign_rider(delivery, best)
+    for rider, distance_km, score in scored[:3]:
+        DeliveryOffer.objects.create(
+            delivery=delivery,
+            rider=rider,
+            distance_km=round(distance_km, 2),
+            score=round(score, 4),
+        )
     return delivery
 
 

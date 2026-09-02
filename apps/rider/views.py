@@ -1,5 +1,8 @@
 from django.shortcuts import get_object_or_404
+from django.db import transaction
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from rest_framework import generics
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -55,14 +58,23 @@ class RespondToOfferView(APIView):
     permission_classes = [IsRider]
 
     def post(self, request, offer_id):
-        offer = get_object_or_404(DeliveryOffer, id=offer_id, rider__user=request.user)
-        decision = request.data.get("decision")  # accepted | declined
-        if decision not in ("accepted", "declined"):
-            return Response({"detail": "decision must be accepted/declined"}, status=400)
-        offer.status = decision
-        offer.save(update_fields=["status"])
-        if decision == "accepted":
-            services.assign_rider(offer.delivery, offer.rider)
+        with transaction.atomic():
+            offer = get_object_or_404(
+                DeliveryOffer.objects.select_for_update(), id=offer_id, rider__user=request.user
+            )
+            decision = request.data.get("decision")  # accepted | declined
+            if decision not in ("accepted", "declined"):
+                return Response({"detail": "decision must be accepted/declined"}, status=400)
+            if offer.status != "offered":
+                return Response({"detail": "This delivery offer is no longer available."}, status=400)
+            if decision == "accepted" and offer.delivery.rider_id:
+                offer.status = "expired"
+                offer.save(update_fields=["status"])
+                return Response({"detail": "Another rider has already accepted this delivery."}, status=400)
+            offer.status = decision
+            offer.save(update_fields=["status"])
+            if decision == "accepted":
+                services.assign_rider(offer.delivery, offer.rider)
         return Response(DeliveryOfferSerializer(offer).data)
 
 
@@ -71,7 +83,22 @@ class UpdateLocationView(APIView):
 
     def post(self, request):
         rider = _rider(request)
-        serializer = RiderLocationPingSerializer(data=request.data)
+        try:
+            latitude = Decimal(str(request.data.get("latitude"))).quantize(
+                Decimal("0.000001"), rounding=ROUND_HALF_UP
+            )
+            longitude = Decimal(str(request.data.get("longitude"))).quantize(
+                Decimal("0.000001"), rounding=ROUND_HALF_UP
+            )
+        except (InvalidOperation, TypeError, ValueError):
+            raise ValidationError({"detail": "Latitude and longitude must be valid numbers."})
+        if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+            raise ValidationError({"detail": "Latitude must be between -90 and 90, and longitude between -180 and 180."})
+
+        serializer = RiderLocationPingSerializer(data={
+            "latitude": latitude,
+            "longitude": longitude,
+        })
         serializer.is_valid(raise_exception=True)
         serializer.save(rider=rider)
         rider.current_latitude = serializer.validated_data["latitude"]
