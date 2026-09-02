@@ -23,11 +23,46 @@ from django.db import transaction
 from apps.catalog.models import Medicine
 from apps.catalog.serializers import MedicineSerializer
 from apps.ai_agent.models import ChatMessage, ChatSession
+from apps.customer.models import Cart
+from apps.medical_store.models import InventoryItem, PharmacyProfile
 
 from . import image_analyzer, medicine_matcher, nlp_engine, ollama_client
 from .language_processor import preprocess
 
 logger = logging.getLogger(__name__)
+
+
+def _medicine_cards(customer, medicines: list[dict]) -> tuple[list[dict], str]:
+    """Add pharmacy-specific price and stock data to matched medicines."""
+    cart, _ = Cart.objects.get_or_create(customer=customer)
+    pharmacy = cart.pharmacy if cart.pharmacy_id else PharmacyProfile.objects.filter(
+        is_verified=True, is_open=True
+    ).first()
+    medicine_ids = [item["medicine"].id for item in medicines]
+    inventory = {}
+    if pharmacy and medicine_ids:
+        inventory = {
+            item.medicine_id: item
+            for item in InventoryItem.objects.filter(
+                pharmacy=pharmacy, medicine_id__in=medicine_ids
+            )
+        }
+
+    cards = []
+    for item in medicines:
+        medicine = item["medicine"]
+        stock = inventory.get(medicine.id)
+        card = {
+            **MedicineSerializer(medicine).data,
+            "match_score": item["score"],
+            "price": float(stock.selling_price) if stock else 0,
+            "stock": stock.quantity_in_stock if stock else 0,
+            "available": bool(stock and stock.quantity_in_stock > 0),
+            "pharmacy": pharmacy.business_name if pharmacy else "No pharmacy selected",
+            "pharmacy_id": pharmacy.id if pharmacy else None,
+        }
+        cards.append(card)
+    return cards, pharmacy.business_name if pharmacy else "No pharmacy selected"
 
 
 def handle_message(
@@ -119,15 +154,14 @@ def handle_message(
         session.language = language
         session.save(update_fields=["language", "updated_at"])
 
+    medicine_cards, pharmacy_name = _medicine_cards(session.customer, medicines)
     return {
         "intent": intent,
         "confidence": round(confidence, 2),
         "language": language,
         "entities": entities,
-        "medicines": [
-            {**MedicineSerializer(m["medicine"]).data, "match_score": m["score"]}
-            for m in medicines
-        ],
+        "medicines": medicine_cards,
+        "pharmacy": pharmacy_name,
         "response": response_text,
     }
 

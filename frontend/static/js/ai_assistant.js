@@ -318,9 +318,11 @@ const PandaAI = (() => {
     API.post("/ai/chat/", { message: text, conversation_id: currentConversationId })
       .then((data) => {
         currentConversationId = data.conversation_id;
-        addToCallTranscript("bot", data.reply);
+        const reply = data.reply || "I could not generate a response.";
+        const actions = data.actions || [];
+        addToCallTranscript("bot", reply);
         setCallState("Speaking...");
-        speakCall(data.reply, () => {
+        speakCall(reply, () => {
           if (isCallActive) {
             setCallState("Tap the orb to speak");
             autoListenTimer = setTimeout(() => {
@@ -328,8 +330,8 @@ const PandaAI = (() => {
             }, 1500);
           }
         });
-        processActions(data.actions || []);
-        if (isOpen && panel) addBotMessage(data.reply, data.actions || []);
+        processActions(actions);
+        if (isOpen && panel) addBotMessage(reply, actions);
       })
       .catch((err) => {
         setCallState("Error. Tap orb to try again.");
@@ -466,9 +468,11 @@ const PandaAI = (() => {
       .then((data) => {
         hideTyping();
         currentConversationId = data.conversation_id;
-        addBotMessage(data.reply, data.actions || []);
-        speak(data.reply);
-        processActions(data.actions || []);
+        const reply = data.reply || "I could not generate a response.";
+        const actions = data.actions || [];
+        addBotMessage(reply, actions);
+        speak(reply);
+        processActions(actions);
         setStatus("Ready to help");
       })
       .catch((err) => {
@@ -476,6 +480,18 @@ const PandaAI = (() => {
         addBotMessage("Sorry, I'm having trouble right now. " + UI.errText(err));
         setStatus("Error");
       });
+  }
+
+  function medicineActions(data) {
+    if (!data.medicines || data.medicines.length === 0) return [];
+    return [{
+      tool: "search_medicines",
+      result: {
+        found: data.medicines.length,
+        medicines: data.medicines,
+        pharmacy: data.pharmacy || "",
+      },
+    }];
   }
 
   function addUserMessage(text) {
@@ -554,7 +570,7 @@ const PandaAI = (() => {
         ? '<div class="ai-med-price-line"><span class="ai-price">Rs ' + (m.price || 0).toLocaleString() + '</span><span class="ai-in-stock-badge">In stock \u00b7 ' + (m.stock || 0) + '</span></div>'
         : '<div class="ai-med-price-line"><span class="ai-out-badge">Not available</span></div>';
       const addBtn = available
-        ? '<button class="ai-action-btn ai-add-btn" data-medicine-id="' + m.id + '" data-medicine-name="' + UI.esc(m.name) + '">+ Add</button>'
+        ? '<button class="ai-action-btn ai-add-btn" data-medicine-id="' + m.id + '" data-pharmacy-id="' + (m.pharmacy_id || '') + '" data-medicine-name="' + UI.esc(m.name) + '">+ Add</button>'
         : '<span class="ai-out-badge">Out of stock</span>';
       return '<div class="ai-med-item"><div class="ai-med-info"><div class="ai-med-name">' + UI.esc(m.name) + ' ' + UI.esc(m.strength || "") + '</div><div class="ai-med-sub">' + UI.esc(m.generic_name || "") + (m.form ? ' \u00b7 ' + UI.esc(m.form) : "") + (m.requires_prescription ? ' <span class="ai-rx-badge">Rx</span>' : ' <span class="ai-otc-badge">OTC</span>') + '</div>' + stockLine + (m.description ? '<div class="ai-med-desc">' + UI.esc(m.description.substring(0, 80)) + '</div>' : "") + '</div>' + addBtn + '</div>';
     }).join("");
@@ -631,7 +647,7 @@ const PandaAI = (() => {
       ? '<div><span class="ai-meta-label">Stock:</span> <span class="ai-in-stock-badge">\u2713 In stock \u00b7 ' + result.stock + ' available</span></div>'
       : '<div><span class="ai-meta-label">Stock:</span> <span class="ai-out-badge">Not available at this pharmacy</span></div>';
     const addBtn = available
-      ? '<div class="ai-card-actions"><button class="ai-action-btn ai-add-btn" data-medicine-id="' + result.id + '" data-medicine-name="' + UI.esc(result.name) + '">+ Add to Cart</button></div>'
+      ? '<div class="ai-card-actions"><button class="ai-action-btn ai-add-btn" data-medicine-id="' + result.id + '" data-pharmacy-id="' + (result.pharmacy_id || '') + '" data-medicine-name="' + UI.esc(result.name) + '">+ Add to Cart</button></div>'
       : '<div class="ai-card-actions"><button class="ai-action-btn" disabled>Out of stock</button></div>';
     return '<div class="ai-action-card ai-med-detail"><div class="ai-card-title">' + UI.esc(result.name) + ' ' + UI.esc(result.strength || "") + '</div><div class="ai-order-meta">' + (result.generic_name ? '<div><span class="ai-meta-label">Generic:</span> ' + UI.esc(result.generic_name) + '</div>' : "") + (result.brand ? '<div><span class="ai-meta-label">Brand:</span> ' + UI.esc(result.brand) + '</div>' : "") + (result.category ? '<div><span class="ai-meta-label">Category:</span> ' + UI.esc(result.category) + '</div>' : "") + '<div><span class="ai-meta-label">Form:</span> ' + UI.esc(result.form || "N/A") + '</div><div><span class="ai-meta-label">Price:</span> Rs ' + (result.price || 0).toLocaleString() + '</div>' + stockRow + '<div><span class="ai-meta-label">Pharmacy:</span> ' + UI.esc(result.pharmacy) + '</div></div>' + (result.description ? '<div class="ai-divider"></div><div class="ai-med-desc">' + UI.esc(result.description) + '</div>' : "") + addBtn + '</div>';
   }
@@ -648,10 +664,13 @@ const PandaAI = (() => {
         const medName = btn.dataset.medicineName || "";
         btn.disabled = true; btn.textContent = "Adding...";
         try {
-          const data = await API.post("/ai/chat/", { message: "Add " + medName + " (ID: " + medId + ") to my cart with quantity 1", conversation_id: currentConversationId });
-          currentConversationId = data.conversation_id;
+          await API.post("/customer/cart/", {
+            medicine_id: medId,
+            quantity: 1,
+            pharmacy_id: btn.dataset.pharmacyId,
+          });
           btn.textContent = "\u2714 Added"; btn.classList.add("done");
-          addBotMessage(data.reply, data.actions || []); speak(data.reply); App.refreshCartBadge();
+          App.refreshCartBadge();
         } catch (err) { btn.disabled = false; btn.textContent = "+ Add"; UI.toastErr(err); }
       };
     });

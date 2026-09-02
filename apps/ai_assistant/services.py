@@ -9,6 +9,11 @@ import time
 
 from django.conf import settings
 
+from apps.ai_agent.services import medicine_matcher, ollama_client
+from apps.catalog.serializers import MedicineSerializer
+from apps.customer.models import Cart
+from apps.medical_store.models import InventoryItem, PharmacyProfile
+
 logger = logging.getLogger(__name__)
 
 
@@ -239,10 +244,88 @@ def _build_history(conversation):
     return history
 
 
+def _ollama_medicine_cards(customer, intent, user_message):
+    if intent not in {"medicine_search", "category_browse", "medicine_info"}:
+        return [], "No medicine search was requested."
+
+    matches = medicine_matcher.search(user_message, top_k=5, min_score=0.3)
+    cart, _ = Cart.objects.get_or_create(customer=customer)
+    pharmacy = cart.pharmacy if cart.pharmacy_id else PharmacyProfile.objects.filter(
+        is_verified=True, is_open=True
+    ).first()
+    medicine_ids = [match["medicine"].id for match in matches]
+    inventory = {
+        item.medicine_id: item
+        for item in InventoryItem.objects.filter(
+            pharmacy=pharmacy, medicine_id__in=medicine_ids
+        )
+    } if pharmacy else {}
+
+    cards = []
+    for match in matches:
+        medicine = match["medicine"]
+        stock = inventory.get(medicine.id)
+        cards.append({
+            **MedicineSerializer(medicine).data,
+            "match_score": match["score"],
+            "price": float(stock.selling_price) if stock else 0,
+            "stock": stock.quantity_in_stock if stock else 0,
+            "available": bool(stock and stock.quantity_in_stock > 0),
+            "pharmacy": pharmacy.business_name if pharmacy else "No pharmacy selected",
+            "pharmacy_id": pharmacy.id if pharmacy else None,
+        })
+
+    context = "\n".join(
+        f"{card['name']} {card.get('strength') or ''}: Rs {card['price']}, "
+        f"stock {card['stock']}, available={card['available']}"
+        for card in cards
+    ) or "No matching medicines were found in the catalog."
+    return cards, context
+
+
+def _chat_with_ollama(customer, conversation, user_message):
+    conversation.messages.create(role="user", content=user_message)
+    if conversation.messages.filter(role="user").count() == 1:
+        conversation.title = user_message[:60]
+        conversation.save(update_fields=["title", "updated_at"])
+
+    from apps.ai_agent.services.nlp_engine import get_classifier
+    from .language import detect_language
+
+    intent, _confidence = get_classifier().predict(user_message)
+    language = "roman_ur" if detect_language(user_message) == "ur" else "en"
+    cards, context = _ollama_medicine_cards(customer, intent, user_message)
+    messages = list(conversation.messages.order_by("created_at").values("role", "content"))
+    if messages and messages[-1]["role"] == "user":
+        messages = messages[:-1]
+    history = [
+        {"role": message["role"], "content": message["content"]}
+        for message in messages[-6:]
+        if message["role"] in {"user", "model"}
+    ]
+    reply = ollama_client.generate_response(
+        user_message=user_message,
+        context=context,
+        chat_history=history,
+        language=language,
+    )
+    actions = []
+    if cards:
+        actions.append({
+            "tool": "search_medicines",
+            "args": {"query": user_message},
+            "result": {"found": len(cards), "medicines": cards, "pharmacy": cards[0]["pharmacy"]},
+        })
+    conversation.messages.create(role="model", content=reply, action_data=actions or None)
+    return {"reply": reply, "actions": actions, "conversation_id": conversation.id}
+
+
 def chat_with_ai(customer, conversation, user_message: str):
     """
     Send a message to Gemini, handle function calling loop, and return the response.
     """
+    return _chat_with_ollama(customer, conversation, user_message)
+
     client = _get_client()
     if client is None:
         return {
