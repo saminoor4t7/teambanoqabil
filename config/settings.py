@@ -13,12 +13,13 @@ are interconnected through two shared apps:
     while still fully interconnected through one source of truth.
 """
 
+import os
 from datetime import timedelta
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "change-me"
+SECRET_KEY = "b3(8^+9_=k(dm#5xunov7g6azn%a!qd@kp=yj6hl*gl-5)y!9g"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
@@ -153,6 +154,6 @@ OLLAMA_TIMEOUT = 30                          # seconds before fallback
 
 # ── Google Gemini AI Assistant ──
 # Get a free API key from https://aistudio.google.com/apikey
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")  # set via env to avoid committing secrets
+GEMINI_API_KEY = os.environ.get("AQ.Ab8RN6I3UUwvXvO70syMFHcf69fQ0oTrUyXCZJYBFK_8BmrpGw", "")  # set via env to avoid committing secrets
 GEMINI_MODEL = "gemini-3.6-flash"
 
