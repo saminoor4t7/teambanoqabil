@@ -129,14 +129,23 @@ SIMPLE_JWT = {
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-DEFAULT_FROM_EMAIL = "sussbhoo@gmail.com"
 DELIVERY_FEE = 20
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_HOST_USER = "sussbhoo@gmail.com"
-EMAIL_HOST_PASSWORD = "eozjmshobprvhzwd"
-EMAIL_USE_TLS = True
+# Use the console backend locally so registration OTPs are visible in the
+# runserver terminal. Configure SMTP credentials through environment variables
+# for deployed environments; never commit mailbox credentials here.
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend"
+    if DEBUG
+    else "django.core.mail.backends.smtp.EmailBackend",
+)
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "webmaster@localhost")
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").strip().lower() in {"1", "true", "yes"}
+TESSERACT_CMD = os.environ.get("TESSERACT_CMD", "")
 
 # Async job queue (OCR, forecasting, notifications) per architecture doc.
 CELERY_BROKER_URL = "redis://localhost:6379/0"

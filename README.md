@@ -83,6 +83,34 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
+Medicine photo scanning uses the Tesseract OCR engine in addition to the
+`pytesseract` Python package. Install Tesseract on the machine running Django.
+On Windows, if it is not on `PATH`, set its executable path before starting
+the server:
+
+```powershell
+$env:TESSERACT_CMD = "C:\Program Files\Tesseract-OCR\tesseract.exe"
+python manage.py runserver
+```
+
+In the Medicine Store, choose a pharmacy and use **Scan medicine** to take or
+upload a package photo. The scan endpoint reads the label and checks that
+pharmacy's inventory.
+
+A Flutter client can run OCR on-device and send only the extracted text to the
+same endpoint, without requiring Tesseract on the Django server:
+
+```http
+POST /catalog/scan-availability/
+Content-Type: application/json
+Authorization: Bearer <access-token>
+
+{"text": "Panadol 500 mg", "pharmacy_id": 1}
+```
+
+The response includes `matched`, `available`, `stock`, `medicine`, and the
+recognized text. `pharmacy_id` must be a verified, open pharmacy.
+
 > Note: this sandbox has no internet access, so dependencies couldn't be
 > pip-installed or `migrate` run here — every file was syntax-checked
 > (`ast.parse`) instead. Run the commands above locally to generate

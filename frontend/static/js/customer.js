@@ -100,6 +100,12 @@ const Customer = (() => {
         <button class="btn secondary sm" id="switch-ph">Change Pharmacy</button>
       </div>
       <div id="shop-ph-bar"></div>
+      <section class="scan-panel">
+        <div class="scan-copy"><b>Check a medicine by photo</b><span class="hint">Take a clear photo of the package name to check this pharmacy's stock.</span></div>
+        <label class="btn secondary sm" for="medicine-scan-image">Scan medicine</label>
+        <input id="medicine-scan-image" type="file" accept="image/*" capture="environment" hidden />
+        <div id="medicine-scan-result" aria-live="polite"></div>
+      </section>
       <div class="toolbar">
         <input class="input search" id="shop-q" placeholder="Search medicine or generic name..." value="${UI.esc(shopState.q)}" />
         <select class="input" id="shop-cat"><option value="">All categories</option></select>
@@ -129,6 +135,32 @@ const Customer = (() => {
     });
 
     renderPhBar(ph);
+    const scanInput = document.getElementById("medicine-scan-image");
+    scanInput.onchange = async () => {
+      const image = scanInput.files && scanInput.files[0];
+      if (!image) return;
+      const resultBox = document.getElementById("medicine-scan-result");
+      resultBox.innerHTML = '<div class="hint">Reading image and checking stock...</div>';
+      const form = new FormData();
+      form.append("image", image);
+      form.append("pharmacy_id", ph.id);
+      try {
+        const result = await API.upload("/catalog/scan-availability/", form);
+        const medicineLine = result.matched
+          ? `<b>${UI.esc(result.medicine.name)} ${UI.esc(result.medicine.strength || "")}</b>`
+          : "Could not identify a catalog medicine from this image.";
+        const availability = result.matched
+          ? (result.available
+            ? `<span class="badge green">In stock · ${result.stock} available</span>`
+            : '<span class="badge red">Not available at this pharmacy</span>')
+          : "";
+        resultBox.innerHTML = `<div class="scan-result-card"><div>${medicineLine}</div><div>${availability}</div>${result.recognized_text ? `<details><summary>Text read from image</summary><div class="scan-ocr-text">${UI.esc(result.recognized_text)}</div></details>` : '<div class="hint">No readable text was found. Try a brighter, closer photo.</div>'}</div>`;
+      } catch (err) {
+        resultBox.innerHTML = `<div class="banner error">${UI.esc(UI.errText(err))}</div>`;
+      } finally {
+        scanInput.value = "";
+      }
+    };
     document.getElementById("switch-ph").onclick = async () => {
       const newPh = await openPharmacyPicker();
       if (newPh) {

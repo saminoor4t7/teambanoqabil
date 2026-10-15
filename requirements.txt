@@ -5,6 +5,7 @@ djangorestframework-simplejwt
 django-filter
 psycopg2-binary
 Pillow
+pytesseract
 requests
 python-decouple
 django-cors-headers
@@ -16,7 +17,7 @@ google-genai
 
 # ── AI Agent dependencies ──────────────────────────────────
 sentence-transformers          # semantic search embeddings
-scikit-learn                   # intent classification
+scikit-learn==1.9.1            # intent classification; keep in sync with the checked-in model
 joblib                         # sklearn model serialisation
 numpy                          # numerical ops for embeddings
 opencv-python-headless         # medicine image feature extraction

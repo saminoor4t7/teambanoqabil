@@ -5,6 +5,23 @@ from apps.medical_store.models import InventoryItem
 from .models import Brand, Category, Medicine
 
 
+class MedicineAvailabilityScanSerializer(serializers.Serializer):
+    text = serializers.CharField(required=False, allow_blank=True, max_length=2000)
+    image = serializers.ImageField(required=False)
+    pharmacy_id = serializers.IntegerField(min_value=1)
+
+    def validate(self, attrs):
+        attrs["text"] = (attrs.get("text") or "").strip()
+        if not attrs["text"] and not attrs.get("image"):
+            raise serializers.ValidationError({"text": "Send recognized medicine text or an image."})
+        return attrs
+
+    def validate_image(self, image):
+        if image.size > 10 * 1024 * 1024:
+            raise serializers.ValidationError("Image must be 10 MB or smaller.")
+        return image
+
+
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category

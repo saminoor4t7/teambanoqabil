@@ -211,6 +211,12 @@ table.table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 
 /* ---------- Medicine / product cards ---------- */
 .med-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.scan-panel { display: grid; grid-template-columns: 1fr auto; gap: 10px 16px; align-items: center; margin: 14px 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface, #fff); }
+.scan-copy { display: flex; flex-direction: column; gap: 3px; }
+.scan-panel #medicine-scan-result { grid-column: 1 / -1; }
+.scan-result-card { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding-top: 10px; border-top: 1px solid var(--border); }
+.scan-result-card details { flex-basis: 100%; font-size: 12px; color: var(--muted); }
+.scan-ocr-text { white-space: pre-wrap; margin-top: 5px; }
 .med-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
 .med-card .med-name { font-weight: 700; font-size: 15px; }
 .med-card .med-generic { color: var(--muted); font-size: 12.5px; }

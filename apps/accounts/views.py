@@ -1,4 +1,5 @@
 import secrets
+import smtplib
 from datetime import timedelta
 
 from django.conf import settings
@@ -63,16 +64,23 @@ class RegisterView(generics.CreateAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        send_mail(
-            subject="Medical Panda registration code",
-            message=(
-                f"Your Medical Panda verification code is: {pending.otp_code}\n\n"
-                "This code expires in 5 minutes."
-            ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[pending.email],
-            fail_silently=False,
-        )
+        try:
+            send_mail(
+                subject="Medical Panda registration code",
+                message=(
+                    f"Your Medical Panda verification code is: {pending.otp_code}\n\n"
+                    "This code expires in 5 minutes."
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[pending.email],
+                fail_silently=False,
+            )
+        except (OSError, smtplib.SMTPException):
+            pending.delete()
+            return Response(
+                {"detail": "Could not send the registration code. Check email configuration and try again."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return Response(
             {"detail": "Registration code sent to your email address.", "email": pending.email},
             status=status.HTTP_201_CREATED,
