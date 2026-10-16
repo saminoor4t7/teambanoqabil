@@ -16,8 +16,10 @@ are interconnected through two shared apps:
 import os
 from datetime import timedelta
 from pathlib import Path
+from decouple import AutoConfig
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+env_config = AutoConfig(search_path=BASE_DIR)
 
 SECRET_KEY = "b3(8^+9_=k(dm#5xunov7g6azn%a!qd@kp=yj6hl*gl-5)y!9g"
 DEBUG = True
@@ -130,21 +132,19 @@ SIMPLE_JWT = {
 CORS_ALLOW_ALL_ORIGINS = True
 
 DELIVERY_FEE = 20
-# Use the console backend locally so registration OTPs are visible in the
-# runserver terminal. Configure SMTP credentials through environment variables
-# for deployed environments; never commit mailbox credentials here.
-EMAIL_BACKEND = os.environ.get(
-    "EMAIL_BACKEND",
-    "django.core.mail.backends.console.EmailBackend"
-    if DEBUG
-    else "django.core.mail.backends.smtp.EmailBackend",
+# Load local mail settings from .env (or the process environment). SMTP is the
+# default in development too, so OTP messages are sent instead of printed.
+EMAIL_BACKEND = env_config(
+    "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
 )
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "webmaster@localhost")
-EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
-EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
-EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").strip().lower() in {"1", "true", "yes"}
+EMAIL_HOST = env_config("EMAIL_HOST", default="smtp.gmail.com")
+EMAIL_PORT = env_config("EMAIL_PORT", default=587, cast=int)
+EMAIL_HOST_USER = env_config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env_config("EMAIL_HOST_PASSWORD", default="")
+DEFAULT_FROM_EMAIL = env_config(
+    "DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER or "webmaster@localhost"
+)
+EMAIL_USE_TLS = env_config("EMAIL_USE_TLS", default=True, cast=bool)
 TESSERACT_CMD = os.environ.get("TESSERACT_CMD", "")
 
 # Async job queue (OCR, forecasting, notifications) per architecture doc.
@@ -165,4 +165,5 @@ OLLAMA_TIMEOUT = 30                          # seconds before fallback
 # Get a free API key from https://aistudio.google.com/apikey
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()  # set via environment variable
 GEMINI_MODEL = "gemini-3.6-flash"
+
 

@@ -5,7 +5,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import generics, permissions, status
@@ -65,16 +65,46 @@ class RegisterView(generics.CreateAPIView):
             )
 
         try:
-            send_mail(
-                subject="Medical Panda registration code",
-                message=(
-                    f"Your Medical Panda verification code is: {pending.otp_code}\n\n"
-                    "This code expires in 5 minutes."
+            message = EmailMultiAlternatives(
+                subject="Your Medical Panda verification code",
+                body=(
+                    f"Your Medical Panda verification code is {pending.otp_code}.\n\n"
+                    "This code expires in 5 minutes. If you didn't request it, you can "
+                    "safely ignore this email."
                 ),
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[pending.email],
-                fail_silently=False,
+                to=[pending.email],
             )
+            message.attach_alternative(
+                f"""\
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#f3f7f6;font-family:Arial,Helvetica,sans-serif;color:#18332f;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f7f6;padding:36px 16px;">
+      <tr><td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
+          <tr><td style="background:#087f6b;padding:26px 32px;color:#ffffff;">
+            <div style="font-size:13px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;">Medical Panda</div>
+            <div style="font-size:25px;font-weight:bold;margin-top:12px;">Verify your email</div>
+          </td></tr>
+          <tr><td style="padding:32px;">
+            <p style="font-size:16px;line-height:1.6;margin:0 0 20px;">Use this one-time code to finish creating your account:</p>
+            <div style="background:#eef8f5;border:1px solid #d5eee6;border-radius:12px;padding:18px;text-align:center;font-size:34px;font-weight:bold;letter-spacing:9px;color:#087f6b;">
+              {pending.otp_code}
+            </div>
+            <p style="font-size:14px;line-height:1.6;color:#526660;margin:20px 0 0;">This code expires in <strong>5 minutes</strong>. For your security, don't share it with anyone.</p>
+            <p style="font-size:13px;line-height:1.6;color:#71827d;margin:20px 0 0;">If you didn't request this code, you can safely ignore this email.</p>
+          </td></tr>
+          <tr><td style="padding:18px 32px;background:#f8fbfa;color:#82918c;font-size:12px;">Medical Panda · Account verification</td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>
+""",
+                "text/html",
+            )
+            message.send(fail_silently=False)
         except (OSError, smtplib.SMTPException):
             pending.delete()
             return Response(
